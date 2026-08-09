@@ -42,14 +42,14 @@ fun CollectibleCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             // Header Image Placeholder / Icon Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(120.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(
                         Brush.linearGradient(
@@ -66,7 +66,7 @@ fun CollectibleCard(
                 Icon(
                     imageVector = categoryIcon,
                     contentDescription = item.category,
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(48.dp),
                     tint = GoldAccent.copy(alpha = 0.85f)
                 )
 
@@ -74,116 +74,116 @@ fun CollectibleCard(
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(8.dp)
+                        .padding(6.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color.Black.copy(alpha = 0.75f))
+                        .background(Color.Black.copy(alpha = 0.8f))
                         .border(1.dp, EmeraldVerified, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Verified,
                         contentDescription = "Verified",
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(11.dp),
                         tint = EmeraldVerified
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = "${item.authenticityScore}% AI Auth",
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                // Top Right Grade Badge
+                // Top Right Category Pill
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
+                        .padding(6.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(GoldAccent)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = item.conditionGrade,
-                        color = Color.Black,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        text = item.category,
+                        color = GoldAccent,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Title
             Text(
                 text = item.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Vault Hash ID & Owner
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Condition Grade (Replaces cert serial # & seller for cleaner look)
+            Surface(
+                color = GoldAccent.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(6.dp)
             ) {
                 Text(
-                    text = item.vaultHashId,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 11.sp
-                )
-                Text(
-                    text = "by ${item.ownerName}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
+                    text = "Grade: ${item.conditionGrade}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GoldAccent,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Price & Escrow Status Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Est. Value",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
-                    )
-                    Text(
-                        text = formattedPrice,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = EmeraldVerified
-                    )
-                }
+            // Price & Horizontal Escrow Bar Below Value
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Est. Value",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = formattedPrice,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = EmeraldVerified
+                )
 
                 if (item.isListedForSale) {
-                    Box(
+                    Spacer(modifier = Modifier.height(4.dp))
+                    // Horizontal sleek pill below value
+                    Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(BlueEscrow.copy(alpha = 0.2f))
-                            .border(1.dp, BlueEscrow, RoundedCornerShape(20.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(BlueEscrow.copy(alpha = 0.12f))
+                            .border(1.dp, BlueEscrow.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = "Escrow",
+                            modifier = Modifier.size(10.dp),
+                            tint = BlueEscrow
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Escrow Ready",
                             color = BlueEscrow,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }

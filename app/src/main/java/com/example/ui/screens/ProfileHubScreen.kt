@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -246,6 +246,122 @@ fun ProfileHubScreen(
                         onCheckedChange = { onToggleDarkMode() },
                         modifier = Modifier.testTag("dark_mode_switch")
                     )
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+
+                // User Sales & Net Earnings Analytics Section
+                var showEarningsDetails by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showEarningsDetails = !showEarningsDetails }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .testTag("seller_earnings_row"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Earnings", tint = EmeraldVerified)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "Seller Performance & Net Earnings", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(text = "Total gross sales, shipping fees & net profits", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showEarningsDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Toggle"
+                    )
+                }
+
+                if (showEarningsDetails) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(14.dp)
+                    ) {
+                        Text(
+                            text = "NET EARNINGS OVERVIEW",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(text = "Gross Sales Volume", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = "$285.00", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                            }
+
+                            Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "To", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(text = "Net Profit (After Fees & Shipping)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = "$258.00", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = EmeraldVerified)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Deductions breakdown
+                        listOf(
+                            Triple("Gross Sales (2 Completed Trades)", "$285.00", MaterialTheme.colorScheme.onSurface),
+                            Triple("Vault Escrow Fee (2.5%)", "-$7.13", MaterialTheme.colorScheme.onSurfaceVariant),
+                            Triple("Insured Tracked Shipping Labels", "-$19.87", MaterialTheme.colorScheme.onSurfaceVariant),
+                            Triple("Net Payout Earned", "$258.00", EmeraldVerified)
+                        ).forEach { (label, amount, color) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = label, fontSize = 12.sp, fontWeight = if (color == EmeraldVerified) FontWeight.Bold else FontWeight.Normal)
+                                Text(text = amount, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = color)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Payout button
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = EmeraldVerified.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = "$258.00 Available to Withdraw", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                                    Text(text = "Direct payout via Bank / Stripe Escrow", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Button(
+                                    onClick = { },
+                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldVerified),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Payout", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))

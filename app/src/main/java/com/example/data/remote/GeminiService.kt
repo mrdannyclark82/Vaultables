@@ -13,6 +13,12 @@ import java.util.concurrent.TimeUnit
 
 data class AiAppraisalResult(
     val grade: String,
+    val certSerialNumber: String,
+    val gradingCompany: String,
+    val centeringGrade: Float,
+    val cornersGrade: Float,
+    val edgesGrade: Float,
+    val surfaceGrade: Float,
     val authenticityScore: Int,
     val estimatedValueUsd: Double,
     val marketTrend: String,
@@ -111,9 +117,16 @@ object GeminiService {
             val analysis = parsed.optString("fullAnalysis", "AI Holographic corner and centering inspection completed. Standard authentic issue.")
 
             val randomHash = "VAULT-${(1000..9999).random()}-${(1000..9999).random()}-2026"
+            val certNum = "PSA-${(10000000..99999999).random()}"
 
             AiAppraisalResult(
                 grade = grade,
+                certSerialNumber = certNum,
+                gradingCompany = if (category.contains("CARD", ignoreCase = true)) "PSA" else "VAULT AI",
+                centeringGrade = 9.8f,
+                cornersGrade = 10.0f,
+                edgesGrade = 9.8f,
+                surfaceGrade = 9.8f,
                 authenticityScore = authScore,
                 estimatedValueUsd = valUsd,
                 marketTrend = trend,
@@ -129,8 +142,15 @@ object GeminiService {
     private fun fallbackAppraisal(title: String, category: String): AiAppraisalResult {
         val baseVal = defaultPriceFor(category)
         val hash = "VAULT-${(1000..9999).random()}-${(1000..9999).random()}-2026"
+        val certNum = "PSA-${(10000000..99999999).random()}"
         return AiAppraisalResult(
             grade = "9.8 Gem Mint",
+            certSerialNumber = certNum,
+            gradingCompany = if (category.contains("CARD", ignoreCase = true)) "PSA" else "VAULT AI",
+            centeringGrade = 9.8f,
+            cornersGrade = 10.0f,
+            edgesGrade = 9.8f,
+            surfaceGrade = 9.8f,
             authenticityScore = 99,
             estimatedValueUsd = baseVal,
             marketTrend = "+12.4% 30d",

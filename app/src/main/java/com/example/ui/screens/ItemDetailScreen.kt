@@ -37,6 +37,11 @@ fun ItemDetailScreen(
     onBuyEscrow: (CollectibleItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showDigitalCertDialog by remember { mutableStateOf(false) }
+    var showTradeOfferModal by remember { mutableStateOf(false) }
+    var tradeCashAmount by remember { mutableStateOf("") }
+    var offerSubmitted by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,6 +49,11 @@ fun ItemDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showDigitalCertDialog = true }) {
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Cert QR", tint = GoldAccent)
                     }
                 }
             )
@@ -74,15 +84,26 @@ fun ItemDetailScreen(
                         )
                     }
 
-                    Button(
-                        onClick = { onBuyEscrow(item) },
-                        colors = ButtonDefaults.buttonColors(containerColor = BlueEscrow),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.testTag("detail_buy_escrow_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Lock, contentDescription = "Lock", modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Initiate Escrow Trade", fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showTradeOfferModal = true },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = "Trade", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Propose Trade", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { onBuyEscrow(item) },
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueEscrow),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("detail_buy_escrow_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Lock, contentDescription = "Lock", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Buy / Escrow", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -148,6 +169,66 @@ fun ItemDetailScreen(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Owner: ${item.ownerName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "★ ${item.ownerRating}",
+                        fontWeight = FontWeight.Bold,
+                        color = GoldAccent,
+                        fontSize = 12.sp
+                    )
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        text = item.subcategory,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Slab Digital Certificate Export Action Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { showDigitalCertDialog = true }
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Badge, contentDescription = "Badge", tint = GoldAccent)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(text = "Official Digital Slab Passport", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Verify Cert #${item.certSerialNumber.ifBlank { item.vaultHashId }}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "View")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Spacer(modifier = Modifier.height(4.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -187,44 +268,79 @@ fun ItemDetailScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Vault AI Certificate of Authenticity",
+                                text = "${item.gradingCompany} Official Slab & Grading Certification",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
-                        Text(
-                            text = "${item.authenticityScore}% Score",
-                            fontWeight = FontWeight.Black,
-                            color = EmeraldVerified,
-                            fontSize = 12.sp
-                        )
+                        Surface(
+                            color = GoldAccent,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = item.conditionGrade,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(
-                        text = "AI Generated Unique Serial / ID:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = item.vaultHashId,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        color = GoldAccent,
-                        fontSize = 13.sp
-                    )
+                    // Slab Serial Certification Bar Banner
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Black.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "OFFICIAL CERTIFICATION SERIAL #",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = item.certSerialNumber.ifBlank { item.vaultHashId },
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = GoldAccent,
+                                    fontSize = 14.sp
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "SLAB AUTHENTICITY",
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${item.authenticityScore}% AI VERIFIED",
+                                    fontWeight = FontWeight.Bold,
+                                    color = EmeraldVerified,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
                     Text(
-                        text = "AI Condition Grade Assessment (${item.conditionGrade}):",
+                        text = "AI Optical Sub-Grade Assessment Breakdown:",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -238,10 +354,10 @@ fun ItemDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         listOf(
-                            "Centering" to "10.0",
-                            "Surface" to "9.8",
-                            "Edges" to "9.6",
-                            "Corners" to "9.8"
+                            "Centering" to String.format("%.1f", item.centeringGrade),
+                            "Corners" to String.format("%.1f", item.cornersGrade),
+                            "Edges" to String.format("%.1f", item.edgesGrade),
+                            "Surface" to String.format("%.1f", item.surfaceGrade)
                         ).forEach { (label, grade) ->
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
@@ -466,6 +582,210 @@ fun ItemDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // Digital Certificate Passport Modal
+        if (showDigitalCertDialog) {
+            AlertDialog(
+                onDismissRequest = { showDigitalCertDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.VerifiedUser, contentDescription = "Verified", tint = GoldAccent)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Official Slab Passport", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black, RoundedCornerShape(12.dp))
+                            .border(1.dp, GoldAccent, RoundedCornerShape(12.dp))
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = item.gradingCompany.uppercase(),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = GoldAccent
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "CERT # ${item.certSerialNumber.ifBlank { item.vaultHashId }}",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = item.title,
+                            fontSize = 12.sp,
+                            color = Color.LightGray,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = GoldAccent,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "GRADE: ${item.conditionGrade}",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Sub-grades table inside digital cert
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Centering", fontSize = 9.sp, color = Color.Gray)
+                                Text("${item.centeringGrade}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Corners", fontSize = 9.sp, color = Color.Gray)
+                                Text("${item.cornersGrade}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Edges", fontSize = 9.sp, color = Color.Gray)
+                                Text("${item.edgesGrade}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Surface", fontSize = 9.sp, color = Color.Gray)
+                                Text("${item.surfaceGrade}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "QR Code Verification",
+                            tint = Color.White,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "Scan QR to verify blockchain slab proof", fontSize = 9.sp, color = Color.Gray)
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showDigitalCertDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                    ) {
+                        Text("Export PDF Certificate", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDigitalCertDialog = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
+        // Trade Offer Builder Modal
+        if (showTradeOfferModal) {
+            AlertDialog(
+                onDismissRequest = {
+                    showTradeOfferModal = false
+                    offerSubmitted = false
+                },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = "Trade", tint = BlueEscrow)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Propose Peer-to-Peer Trade", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    if (offerSubmitted) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Success", tint = EmeraldVerified, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("Trade Proposal Transmitted!", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Sent securely to ${item.ownerName} via Vault Smart Escrow.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        Column {
+                            Text(text = "Target Item: ${item.title}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "Target Value: $formattedPrice", fontSize = 11.sp, color = EmeraldVerified, fontWeight = FontWeight.Bold)
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(text = "Add Cash Offset (Optional):", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            OutlinedTextField(
+                                value = tradeCashAmount,
+                                onValueChange = { tradeCashAmount = it },
+                                placeholder = { Text("e.g. 250.00") },
+                                prefix = { Text("$ ") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(text = "Offered Vault Collectible:", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Item", tint = GoldAccent)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(text = "Your Vault Portfolio Collectible", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(text = "Escrow value match verified", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    if (offerSubmitted) {
+                        Button(onClick = {
+                            showTradeOfferModal = false
+                            offerSubmitted = false
+                        }) {
+                            Text("Done")
+                        }
+                    } else {
+                        Button(
+                            onClick = { offerSubmitted = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueEscrow)
+                        ) {
+                            Text("Submit Trade Proposal", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                dismissButton = {
+                    if (!offerSubmitted) {
+                        TextButton(onClick = { showTradeOfferModal = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            )
         }
     }
 }

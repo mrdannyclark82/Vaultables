@@ -55,6 +55,8 @@ fun MyVaultScreen(
         val matchesSearch = searchQuery.isBlank() ||
                 item.title.contains(searchQuery, ignoreCase = true) ||
                 item.vaultHashId.contains(searchQuery, ignoreCase = true) ||
+                item.certSerialNumber.contains(searchQuery, ignoreCase = true) ||
+                item.conditionGrade.contains(searchQuery, ignoreCase = true) ||
                 item.subcategory.contains(searchQuery, ignoreCase = true)
         matchesCategory && matchesSubcategory && matchesSearch
     }

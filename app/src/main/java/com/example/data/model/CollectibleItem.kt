@@ -76,6 +76,12 @@ data class CollectibleItem(
     val ownerRating: Float = 4.9f,
     val estimatedValueUsd: Double,
     val conditionGrade: String, // e.g. "9.8 Gem Mint", "PSA 10", "9.4 Near Mint"
+    val certSerialNumber: String = "CERT-84920194", // Unique Beckett/PSA-style serial cert number e.g. "PSA-84920194" or "BGS-00129481"
+    val gradingCompany: String = "PSA", // e.g. "PSA", "BGS", "CGC", "SGC", "VAULT AI"
+    val centeringGrade: Float = 9.5f,
+    val cornersGrade: Float = 10.0f,
+    val edgesGrade: Float = 9.5f,
+    val surfaceGrade: Float = 9.5f,
     val authenticityScore: Int = 98, // 0 - 100%
     val vaultHashId: String, // Unique identifier e.g. "VAULT-8F3A-92D1-2026"
     val isListedForSale: Boolean = false,
