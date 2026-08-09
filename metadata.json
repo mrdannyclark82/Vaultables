@@ -1,0 +1,6 @@
+{
+  "name": "Vault Collectibles",
+  "description": "AI-powered collectibles catalog, grading, real-time appraisal & escrow marketplace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
