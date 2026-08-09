@@ -26,12 +26,15 @@ import com.example.ui.theme.BlueEscrow
 import com.example.ui.theme.EmeraldVerified
 import com.example.ui.theme.GoldAccent
 
+import com.example.data.remote.UserAccount
+
 @Composable
 fun ProfileHubScreen(
     isDarkMode: Boolean,
     isBiometricLocked: Boolean,
     selectedCurrency: CurrencyCode,
     escrows: List<EscrowTransaction>,
+    currentUser: UserAccount = UserAccount(),
     onToggleDarkMode: () -> Unit,
     onToggleBiometric: (Boolean) -> Unit,
     onSelectCurrency: (CurrencyCode) -> Unit,
@@ -39,6 +42,10 @@ fun ProfileHubScreen(
     onViewShippingLabel: (EscrowTransaction) -> Unit,
     onConfirmBuyer: (Long) -> Unit,
     onConfirmSeller: (Long) -> Unit,
+    onOpenAuthModal: () -> Unit = {},
+    onOpenReferralModal: () -> Unit = {},
+    onExportCsv: () -> Unit = {},
+    onClearMockData: () -> Unit = {},
     formatPrice: (Double) -> String,
     modifier: Modifier = Modifier
 ) {
@@ -49,9 +56,12 @@ fun ProfileHubScreen(
     ) {
         Spacer(modifier = Modifier.height(12.dp))
 
-        // User Collector Profile Card
+        // User Collector Profile Card (Google OAuth Identity Integration)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenAuthModal() }
+                .testTag("user_profile_card"),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = RoundedCornerShape(20.dp)
         ) {
@@ -66,11 +76,11 @@ fun ProfileHubScreen(
                         .background(GoldAccent),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Profile Avatar",
-                        modifier = Modifier.size(32.dp),
-                        tint = Color.Black
+                    Text(
+                        text = if (currentUser.displayName.isNotBlank()) currentUser.displayName.take(1).uppercase() else "G",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
                 }
 
@@ -79,7 +89,7 @@ fun ProfileHubScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Alex Vance",
+                            text = if (currentUser.displayName.isNotBlank()) currentUser.displayName else "Google Collector",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -96,7 +106,7 @@ fun ProfileHubScreen(
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "4.95 ★ • 34 Escrow Deals • GDPR Compliant",
+                        text = if (currentUser.email.isNotBlank()) currentUser.email else "Tap to sign in with Google OAuth",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -107,7 +117,7 @@ fun ProfileHubScreen(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("Verified Vault OG", "Top Escrow Trader", "TCG Master").forEach { badge ->
+                        listOf(currentUser.authProvider, "Top Escrow Trader", "App Store Ready").forEach { badge ->
                             Surface(
                                 color = GoldAccent.copy(alpha = 0.2f),
                                 shape = RoundedCornerShape(12.dp)
@@ -122,6 +132,76 @@ fun ProfileHubScreen(
                             }
                         }
                     }
+                }
+
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "OAuth Settings",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Referral & Rewards Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenReferralModal() }
+                .testTag("referral_program_banner"),
+            colors = CardDefaults.cardColors(containerColor = GoldAccent.copy(alpha = 0.15f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(GoldAccent),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CardGiftcard,
+                            contentDescription = "Referral Reward",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Referral Rewards Program",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Get 1 Month Free Subscription when referee completes paid trade",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    color = GoldAccent,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Claim",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
                 }
             }
         }
@@ -382,6 +462,29 @@ fun ProfileHubScreen(
                         Column {
                             Text(text = "Export Inventory & Activity Report", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(text = "Generate PDF for offline tracking", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Go")
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+
+                // Export Vault CSV Ledger Button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExportCsv() }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .testTag("export_csv_ledger_row"),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.TableChart, contentDescription = "CSV Ledger", tint = EmeraldVerified)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "Export Vault Insurance CSV Ledger", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(text = "Download structured spreadsheet for insurance appraisal & taxes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Go")

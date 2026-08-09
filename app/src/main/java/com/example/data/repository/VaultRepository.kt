@@ -363,11 +363,17 @@ class VaultRepository(private val db: AppDatabase) {
         title: String,
         category: String,
         description: String,
-        imageType: String
+        imageType: String,
+        brand: String = "",
+        year: String = ""
     ): CollectibleItem {
         val appraisal = GeminiService.analyzeAndAppraise(title, category, description)
+        val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
+        val finalBrand = if (brand.isNotBlank()) brand else appraisal.detectedBrand
+        val finalYear = if (year.isNotBlank()) year else appraisal.detectedYear
+
         val newItem = CollectibleItem(
-            title = title,
+            title = finalTitle,
             category = category,
             description = description,
             ownerName = "Vault Collector",
@@ -384,7 +390,9 @@ class VaultRepository(private val db: AppDatabase) {
             vaultHashId = appraisal.vaultHashId,
             isListedForSale = false,
             salePriceUsd = appraisal.estimatedValueUsd,
-            imageType = imageType
+            imageType = imageType,
+            brandName = finalBrand,
+            releaseYear = finalYear
         )
         val id = db.collectibleDao().insertItem(newItem)
         val savedItem = newItem.copy(id = id)
@@ -503,5 +511,9 @@ class VaultRepository(private val db: AppDatabase) {
         sb.append("============================================================\n")
         sb.append("E2EE Encrypted Ledger Signature: 0x8F2A9C91B412E83F001\n")
         return sb.toString()
+    }
+
+    suspend fun clearAllMockItems() {
+        db.collectibleDao().deleteAllItems()
     }
 }

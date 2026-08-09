@@ -43,11 +43,13 @@ fun AiScannerModal(
     isScanning: Boolean,
     scanMessage: String,
     onDismiss: () -> Unit,
-    onConfirmScan: (title: String, category: String, desc: String, imageType: String) -> Unit,
+    onConfirmScan: (title: String, category: String, desc: String, imageType: String, brand: String, year: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var titleInput by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(CollectibleCategory.TRADING_CARDS) }
+    var brandInput by remember { mutableStateOf("") }
+    var yearInput by remember { mutableStateOf("") }
     var descInput by remember { mutableStateOf("") }
     var isLiveCameraActive by remember { mutableStateOf(true) }
 
@@ -212,18 +214,77 @@ fun AiScannerModal(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        color = GoldAccent.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "AI Identifier",
+                                tint = GoldAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Intelligent Optical Identifier Active",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldAccent
+                                )
+                                Text(
+                                    text = "Auto-extracts Subject Name, Brand (e.g. Fleer/Topps) & Year (e.g. 1986)",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = titleInput,
                         onValueChange = { titleInput = it },
-                        label = { Text("Item Title / Identification") },
-                        placeholder = { Text("e.g. 1999 Charizard 1st Edition") },
+                        label = { Text("Item Title / Search Query") },
+                        placeholder = { Text("e.g. Michael Jordan 1986, Charizard, Rolex Daytona") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("scanner_title_input")
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Brand & Year Optional Fields Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = brandInput,
+                            onValueChange = { brandInput = it },
+                            label = { Text("Brand (Optional)") },
+                            placeholder = { Text("e.g. Fleer, Topps, Rolex") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = yearInput,
+                            onValueChange = { yearInput = it },
+                            label = { Text("Year (Optional)") },
+                            placeholder = { Text("e.g. 1986") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -276,8 +337,10 @@ fun AiScannerModal(
                         onConfirmScan(
                             finalTitle,
                             selectedCategory.displayName,
-                            descInput.ifBlank { "Scanned via Live Device Camera & Vault AI Holographic Analyzer" },
-                            selectedCategory.name
+                            descInput.ifBlank { "Scanned via Live Camera & Gemini AI Optical Identifier" },
+                            selectedCategory.name,
+                            brandInput,
+                            yearInput
                         )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),

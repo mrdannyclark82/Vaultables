@@ -26,4 +26,7 @@ interface CollectibleDao {
 
     @Query("DELETE FROM collectible_items WHERE id = :id")
     suspend fun deleteItemById(id: Long)
+
+    @Query("DELETE FROM collectible_items")
+    suspend fun deleteAllItems()
 }

@@ -22,12 +22,15 @@ import com.example.ui.theme.EmeraldVerified
 import com.example.ui.theme.GoldAccent
 import com.example.ui.viewmodel.VaultViewModel
 
+import androidx.compose.ui.platform.LocalContext
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: VaultViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val allItems by viewModel.allItems.collectAsStateWithLifecycle()
     val marketplaceListings by viewModel.marketplaceListings.collectAsStateWithLifecycle()
@@ -85,6 +88,27 @@ fun MainScreen(
                             }
                         },
                         actions = {
+                            // Google User Account Profile Button
+                            IconButton(
+                                onClick = { viewModel.setShowAuthModal(true) },
+                                modifier = Modifier.testTag("top_bar_auth_button")
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(GoldAccent),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (uiState.currentUser.displayName.isNotBlank()) uiState.currentUser.displayName.take(1).uppercase() else "G",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+
                             // Real-time Trade Alerts Notification Icon Button
                             IconButton(
                                 onClick = { viewModel.setShowNotificationDrawer(true) },
@@ -221,6 +245,7 @@ fun MainScreen(
                         isBiometricLocked = uiState.isBiometricLocked,
                         selectedCurrency = uiState.selectedCurrency,
                         escrows = allEscrows,
+                        currentUser = uiState.currentUser,
                         onToggleDarkMode = { viewModel.toggleDarkMode() },
                         onToggleBiometric = { viewModel.toggleBiometricLock(it) },
                         onSelectCurrency = { viewModel.selectCurrency(it) },
@@ -228,6 +253,10 @@ fun MainScreen(
                         onViewShippingLabel = { viewModel.setShowShippingLabelDialog(true, it) },
                         onConfirmBuyer = { viewModel.confirmEscrowBuyer(it) },
                         onConfirmSeller = { viewModel.confirmEscrowSeller(it) },
+                        onOpenAuthModal = { viewModel.setShowAuthModal(true) },
+                        onOpenReferralModal = { viewModel.setShowReferralModal(true) },
+                        onExportCsv = { viewModel.exportPortfolioCsv(context) },
+                        onClearMockData = { viewModel.clearMockDataForProduction() },
                         formatPrice = { viewModel.formatPrice(it) },
                         modifier = modifierWithPadding
                     )
@@ -236,13 +265,29 @@ fun MainScreen(
         }
 
         // Dialog Modals & Overlays
+        if (uiState.showReferralModal) {
+            ReferralModalDialog(
+                referralState = uiState.referralState,
+                onDismiss = { viewModel.setShowReferralModal(false) },
+                onClaimReward = { email -> viewModel.claimReferralReward(email) }
+            )
+        }
+        if (uiState.showAuthModal) {
+            AuthModalDialog(
+                currentUser = uiState.currentUser,
+                onDismiss = { viewModel.setShowAuthModal(false) },
+                onSignInWithGoogle = { viewModel.signInWithGoogle(context) },
+                onSignOut = { viewModel.signOut(context) },
+                onClearMockData = { viewModel.clearMockDataForProduction() }
+            )
+        }
         if (uiState.showAiScannerDialog) {
             AiScannerModal(
                 isScanning = uiState.isScanningInProgress,
                 scanMessage = uiState.scanStatusMessage,
                 onDismiss = { viewModel.setShowAiScanner(false) },
-                onConfirmScan = { title, cat, desc, imgType ->
-                    viewModel.scanAndAddCollectible(title, cat, desc, imgType)
+                onConfirmScan = { title, cat, desc, imgType, brand, year ->
+                    viewModel.scanAndAddCollectible(title, cat, desc, imgType, brand, year)
                 }
             )
         }

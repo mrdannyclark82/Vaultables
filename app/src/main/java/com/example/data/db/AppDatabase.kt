@@ -14,7 +14,7 @@ import com.example.data.model.*
         TradeAlert::class,
         UserReview::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

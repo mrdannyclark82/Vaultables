@@ -9,10 +9,20 @@ import com.example.data.repository.VaultRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+import com.example.data.remote.GoogleAuthManager
+import com.example.data.remote.UserAccount
+
+import com.example.ui.components.ReferralItem
+import com.example.ui.components.ReferralState
+
 data class VaultUiState(
     val isDarkMode: Boolean = true,
     val selectedCurrency: CurrencyCode = CurrencyCode.USD,
     val isBiometricLocked: Boolean = false,
+    val currentUser: UserAccount = UserAccount(),
+    val showAuthModal: Boolean = false,
+    val referralState: ReferralState = ReferralState(),
+    val showReferralModal: Boolean = false,
     val selectedCategory: String? = null,
     val selectedSubcategory: String? = null,
     val searchQuery: String = "",
@@ -56,8 +66,39 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        val loadedUser = GoogleAuthManager.getSavedUserAccount(application)
+        _uiState.update { it.copy(currentUser = loadedUser) }
+
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
+        }
+    }
+
+    fun setShowAuthModal(show: Boolean) {
+        _uiState.update { it.copy(showAuthModal = show) }
+    }
+
+    fun signInWithGoogle(context: android.content.Context) {
+        GoogleAuthManager.performGoogleSignIn(
+            context = context,
+            onSuccess = { user ->
+                _uiState.update { it.copy(currentUser = user, showAuthModal = false) }
+            },
+            onError = { err ->
+                _uiState.update { it.copy(showAuthModal = false) }
+            }
+        )
+    }
+
+    fun signOut(context: android.content.Context) {
+        GoogleAuthManager.signOut(context)
+        val signedOutUser = UserAccount(displayName = "Guest User", email = "", isSignedIn = false)
+        _uiState.update { it.copy(currentUser = signedOutUser) }
+    }
+
+    fun clearMockDataForProduction() {
+        viewModelScope.launch {
+            repository.clearAllMockItems()
         }
     }
 
@@ -123,19 +164,28 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showActivityReportDialog = show) }
     }
 
-    fun scanAndAddCollectible(title: String, category: String, description: String, imageType: String) {
+    fun scanAndAddCollectible(
+        title: String,
+        category: String,
+        description: String,
+        imageType: String,
+        brand: String = "",
+        year: String = ""
+    ) {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isScanningInProgress = true,
-                    scanStatusMessage = "Analyzing micro-texture, corner alignment, and luster..."
+                    scanStatusMessage = "Performing optical entity recognition & neural identification..."
                 )
             }
-            kotlinx.coroutines.delay(1200)
-            _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing ledger...") }
             kotlinx.coroutines.delay(1000)
+            _uiState.update { it.copy(scanStatusMessage = "Extracting player name, manufacturer brand & release year...") }
+            kotlinx.coroutines.delay(1000)
+            _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing & grading ledger...") }
+            kotlinx.coroutines.delay(800)
 
-            val added = repository.addNewCollectible(title, category, description, imageType)
+            val added = repository.addNewCollectible(title, category, description, imageType, brand, year)
 
             _uiState.update {
                 it.copy(
@@ -184,6 +234,50 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun formatPrice(amountUsd: Double): String {
         return repository.convertCurrency(amountUsd, _uiState.value.selectedCurrency)
+    }
+
+    fun setShowReferralModal(show: Boolean) {
+        _uiState.update { it.copy(showReferralModal = show) }
+    }
+
+    fun claimReferralReward(refereeEmail: String) {
+        val currentRefState = _uiState.value.referralState
+        val updatedList = currentRefState.referrals.map { item ->
+            if (item.refereeEmail == refereeEmail) {
+                item.copy(isRewardClaimed = true)
+            } else {
+                item
+            }
+        }
+        val newEarned = currentRefState.freeMonthsEarned + 1
+        val newClaimed = currentRefState.freeMonthsClaimed + 1
+
+        _uiState.update {
+            it.copy(
+                referralState = currentRefState.copy(
+                    freeMonthsEarned = newEarned,
+                    freeMonthsClaimed = newClaimed,
+                    referrals = updatedList
+                )
+            )
+        }
+    }
+
+    fun exportPortfolioCsv(context: android.content.Context) {
+        val items = allItems.value
+        val sb = StringBuilder()
+        sb.append("ID,Title,Category,Brand,ReleaseYear,ConditionGrade,CertNumber,EstimatedValueUSD,VaultHash,IsListed\n")
+        items.forEach { item ->
+            sb.append("${item.id},\"${item.title}\",\"${item.category}\",\"${item.brandName}\",\"${item.releaseYear}\",\"${item.conditionGrade}\",\"${item.certSerialNumber}\",${item.estimatedValueUsd},\"${item.vaultHashId}\",${item.isListedForSale}\n")
+        }
+
+        val sendIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TITLE, "Vault_Portfolio_Insurance_Ledger.csv")
+            putExtra(android.content.Intent.EXTRA_TEXT, sb.toString())
+            type = "text/csv"
+        }
+        context.startActivity(android.content.Intent.createChooser(sendIntent, "Export Vault Portfolio CSV (Insurance Ledger)"))
     }
 
     fun generateActivityReport(): String {
