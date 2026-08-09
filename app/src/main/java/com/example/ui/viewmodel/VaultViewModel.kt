@@ -14,6 +14,7 @@ data class VaultUiState(
     val selectedCurrency: CurrencyCode = CurrencyCode.USD,
     val isBiometricLocked: Boolean = false,
     val selectedCategory: String? = null,
+    val selectedSubcategory: String? = null,
     val searchQuery: String = "",
     val activeTab: Int = 0,
     val selectedItemForDetail: CollectibleItem? = null,
@@ -81,7 +82,17 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectCategory(category: String?) {
-        _uiState.update { it.copy(selectedCategory = if (it.selectedCategory == category) null else category) }
+        _uiState.update {
+            val newCategory = if (it.selectedCategory == category) null else category
+            it.copy(selectedCategory = newCategory, selectedSubcategory = null)
+        }
+    }
+
+    fun selectSubcategory(subcategory: String?) {
+        _uiState.update {
+            val newSubcategory = if (it.selectedSubcategory == subcategory) null else subcategory
+            it.copy(selectedSubcategory = newSubcategory)
+        }
     }
 
     fun selectItemForDetail(item: CollectibleItem?) {

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -10,7 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -270,14 +271,16 @@ fun ItemDetailScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Market Price Trend Section
+            // Market Price History Section
             Text(
-                text = "Real-Time Market Valuation",
+                text = "Market Price History & Sales Ledger",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            var selectedTimeframe by remember { mutableStateOf("30D") }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -290,37 +293,174 @@ fun ItemDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Historical Trend (30 Days)",
+                            text = "Historical Index Valuation",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.TrendingUp, contentDescription = "Up", tint = EmeraldVerified)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "+12.4%", color = EmeraldVerified, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = when (selectedTimeframe) {
+                                    "7D" -> "+3.8%"
+                                    "30D" -> "+12.4%"
+                                    "90D" -> "+18.9%"
+                                    "1Y" -> "+42.1%"
+                                    else -> "+110.5%"
+                                },
+                                color = EmeraldVerified,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Timeframe Chips Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("7D", "30D", "90D", "1Y", "ALL").forEach { tf ->
+                            val isSelected = selectedTimeframe == tf
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) GoldAccent else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { selectedTimeframe = tf }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = tf,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Simplified Visual Price Chart Sparkline
+                    // Price Chart Bar Graph
+                    val heights = when (selectedTimeframe) {
+                        "7D" -> listOf(0.70f, 0.72f, 0.71f, 0.75f, 0.78f, 0.85f, 0.92f)
+                        "30D" -> listOf(0.40f, 0.45f, 0.42f, 0.60f, 0.58f, 0.75f, 0.82f, 1.0f)
+                        "90D" -> listOf(0.30f, 0.38f, 0.45f, 0.52f, 0.68f, 0.74f, 0.88f, 1.0f)
+                        "1Y" -> listOf(0.20f, 0.35f, 0.40f, 0.55f, 0.65f, 0.72f, 0.85f, 1.0f)
+                        else -> listOf(0.12f, 0.25f, 0.38f, 0.50f, 0.62f, 0.78f, 0.90f, 1.0f)
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp),
+                            .height(80.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom
                     ) {
-                        val heights = listOf(0.4f, 0.45f, 0.42f, 0.6f, 0.58f, 0.75f, 0.82f, 1.0f)
                         heights.forEach { h ->
                             Box(
                                 modifier = Modifier
-                                    .width(28.dp)
+                                    .weight(1f)
+                                    .padding(horizontal = 3.dp)
                                     .fillMaxHeight(h)
                                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                    .background(EmeraldVerified.copy(alpha = 0.7f))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(EmeraldVerified, EmeraldVerified.copy(alpha = 0.4f))
+                                        )
+                                    )
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Key Market Stats Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val lowPrice = item.estimatedValueUsd * 0.88
+                        val highPrice = item.estimatedValueUsd * 1.12
+                        val avgPrice = item.estimatedValueUsd
+
+                        Column {
+                            Text("30D Low", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(formattedPrice.replace(item.estimatedValueUsd.toString(), String.format("%.0f", lowPrice)), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("Avg Sale", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(formattedPrice, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldAccent)
+                        }
+                        Column {
+                            Text("30D High", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(formattedPrice.replace(item.estimatedValueUsd.toString(), String.format("%.0f", highPrice)), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
+                        }
+                        Column {
+                            Text("Volatility", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Low (4.2%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Verified Comparable Sales Table
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Recent Public Verified Sales",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Auction Ledger",
+                            fontSize = 10.sp,
+                            color = GoldAccent,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    listOf(
+                        Triple("Heritage Auctions", "2 days ago", item.estimatedValueUsd * 1.02),
+                        Triple("Vault Escrow Exchange", "5 days ago", item.estimatedValueUsd * 0.98),
+                        Triple("Goldin Auctions", "2 weeks ago", item.estimatedValueUsd * 0.95),
+                        Triple("eBay Authenticated", "1 month ago", item.estimatedValueUsd * 0.91)
+                    ).forEach { (venue, date, price) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(text = venue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(text = "$date • ${item.conditionGrade}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(
+                                text = formattedPrice.replace(item.estimatedValueUsd.toString(), String.format("%.0f", price)),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldVerified
+                            )
+                        }
+                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
                     }
                 }
             }

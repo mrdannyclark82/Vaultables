@@ -47,7 +47,7 @@ fun AiScannerModal(
     modifier: Modifier = Modifier
 ) {
     var titleInput by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf(CollectibleCategory.CARDS) }
+    var selectedCategory by remember { mutableStateOf(CollectibleCategory.TRADING_CARDS) }
     var descInput by remember { mutableStateOf("") }
     var isLiveCameraActive by remember { mutableStateOf(true) }
 

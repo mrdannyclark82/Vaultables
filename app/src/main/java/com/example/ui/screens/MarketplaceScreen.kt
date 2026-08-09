@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CollectibleCategory
 import com.example.data.model.CollectibleItem
 import com.example.ui.components.getCategoryIcon
 import com.example.ui.theme.BlueEscrow
@@ -29,11 +30,24 @@ import com.example.ui.theme.GoldAccent
 @Composable
 fun MarketplaceScreen(
     listings: List<CollectibleItem>,
+    selectedCategory: String? = null,
+    selectedSubcategory: String? = null,
+    onCategorySelect: (String?) -> Unit = {},
+    onSubcategorySelect: (String?) -> Unit = {},
     onItemClick: (CollectibleItem) -> Unit,
     onEscrowBuyClick: (CollectibleItem) -> Unit,
     formatPrice: (Double) -> String,
     modifier: Modifier = Modifier
 ) {
+    val filteredListings = listings.filter { item ->
+        val matchesCategory = selectedCategory == null || item.category.equals(selectedCategory, ignoreCase = true)
+        val matchesSubcategory = selectedSubcategory == null ||
+                selectedSubcategory.startsWith("All", ignoreCase = true) ||
+                item.subcategory.equals(selectedSubcategory, ignoreCase = true) ||
+                item.title.contains(selectedSubcategory, ignoreCase = true)
+        matchesCategory && matchesSubcategory
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -83,9 +97,69 @@ fun MarketplaceScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        if (listings.isEmpty()) {
+        // Category Filter Chips
+        ScrollableTabRow(
+            selectedTabIndex = if (selectedCategory == null) 0 else 1,
+            edgePadding = 0.dp,
+            divider = {},
+            indicator = {}
+        ) {
+            FilterChip(
+                selected = selectedCategory == null,
+                onClick = { onCategorySelect(null) },
+                label = { Text("All Market (${listings.size})", fontSize = 12.sp) },
+                modifier = Modifier.padding(end = 6.dp)
+            )
+
+            CollectibleCategory.values().forEach { cat ->
+                val count = listings.count { it.category.equals(cat.displayName, ignoreCase = true) }
+                FilterChip(
+                    selected = selectedCategory.equals(cat.displayName, ignoreCase = true),
+                    onClick = { onCategorySelect(cat.displayName) },
+                    label = { Text("${cat.displayName} ($count)", fontSize = 12.sp) },
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+            }
+        }
+
+        // Active Category Subcategory Row
+        val activeCategoryEnum = CollectibleCategory.values().find { it.displayName.equals(selectedCategory, ignoreCase = true) }
+        if (activeCategoryEnum != null && activeCategoryEnum.subcategories.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            ScrollableTabRow(
+                selectedTabIndex = 0,
+                edgePadding = 0.dp,
+                divider = {},
+                indicator = {}
+            ) {
+                activeCategoryEnum.subcategories.forEach { sub ->
+                    val isSelected = selectedSubcategory.equals(sub, ignoreCase = true) ||
+                            (selectedSubcategory == null && sub.startsWith("All", ignoreCase = true))
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSubcategorySelect(if (sub.startsWith("All", ignoreCase = true)) null else sub) },
+                        label = {
+                            Text(
+                                text = sub,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = GoldAccent,
+                            selectedLabelColor = Color.Black
+                        ),
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (filteredListings.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -93,7 +167,7 @@ fun MarketplaceScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No items currently listed for sale.",
+                    text = "No items currently listed for sale in this filter.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -103,7 +177,7 @@ fun MarketplaceScreen(
                 contentPadding = PaddingValues(bottom = 80.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(listings) { item ->
+                items(filteredListings) { item ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()

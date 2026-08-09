@@ -33,9 +33,11 @@ import com.example.ui.theme.GoldAccent
 fun MyVaultScreen(
     items: List<CollectibleItem>,
     selectedCategory: String?,
+    selectedSubcategory: String? = null,
     searchQuery: String,
     selectedCurrency: CurrencyCode,
     onCategorySelect: (String?) -> Unit,
+    onSubcategorySelect: (String?) -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onCurrencySelect: (CurrencyCode) -> Unit,
     onItemClick: (CollectibleItem) -> Unit,
@@ -45,10 +47,16 @@ fun MyVaultScreen(
 ) {
     val filteredItems = items.filter { item ->
         val matchesCategory = selectedCategory == null || item.category.equals(selectedCategory, ignoreCase = true)
+        val matchesSubcategory = selectedSubcategory == null ||
+                selectedSubcategory.startsWith("All", ignoreCase = true) ||
+                item.subcategory.equals(selectedSubcategory, ignoreCase = true) ||
+                item.title.contains(selectedSubcategory, ignoreCase = true) ||
+                item.description.contains(selectedSubcategory, ignoreCase = true)
         val matchesSearch = searchQuery.isBlank() ||
                 item.title.contains(searchQuery, ignoreCase = true) ||
-                item.vaultHashId.contains(searchQuery, ignoreCase = true)
-        matchesCategory && matchesSearch
+                item.vaultHashId.contains(searchQuery, ignoreCase = true) ||
+                item.subcategory.contains(searchQuery, ignoreCase = true)
+        matchesCategory && matchesSubcategory && matchesSearch
     }
 
     val totalPortfolioUsd = items.sumOf { it.estimatedValueUsd }
@@ -210,6 +218,39 @@ fun MyVaultScreen(
                     label = { Text("${cat.displayName} ($count)", fontSize = 12.sp) },
                     modifier = Modifier.padding(end = 6.dp)
                 )
+            }
+        }
+
+        // Active Category Subcategory Row
+        val activeCategoryEnum = CollectibleCategory.values().find { it.displayName.equals(selectedCategory, ignoreCase = true) }
+        if (activeCategoryEnum != null && activeCategoryEnum.subcategories.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            ScrollableTabRow(
+                selectedTabIndex = 0,
+                edgePadding = 0.dp,
+                divider = {},
+                indicator = {}
+            ) {
+                activeCategoryEnum.subcategories.forEach { sub ->
+                    val isSelected = selectedSubcategory.equals(sub, ignoreCase = true) ||
+                            (selectedSubcategory == null && sub.startsWith("All", ignoreCase = true))
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSubcategorySelect(if (sub.startsWith("All", ignoreCase = true)) null else sub) },
+                        label = {
+                            Text(
+                                text = sub,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = GoldAccent,
+                            selectedLabelColor = Color.Black
+                        ),
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
+                }
             }
         }
 

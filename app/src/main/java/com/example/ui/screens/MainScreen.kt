@@ -177,9 +177,11 @@ fun MainScreen(
                     0 -> MyVaultScreen(
                         items = allItems,
                         selectedCategory = uiState.selectedCategory,
+                        selectedSubcategory = uiState.selectedSubcategory,
                         searchQuery = uiState.searchQuery,
                         selectedCurrency = uiState.selectedCurrency,
                         onCategorySelect = { viewModel.selectCategory(it) },
+                        onSubcategorySelect = { viewModel.selectSubcategory(it) },
                         onSearchQueryChange = { viewModel.setSearchQuery(it) },
                         onCurrencySelect = { viewModel.selectCurrency(it) },
                         onItemClick = { viewModel.selectItemForDetail(it) },
@@ -190,6 +192,10 @@ fun MainScreen(
 
                     1 -> MarketplaceScreen(
                         listings = marketplaceListings,
+                        selectedCategory = uiState.selectedCategory,
+                        selectedSubcategory = uiState.selectedSubcategory,
+                        onCategorySelect = { viewModel.selectCategory(it) },
+                        onSubcategorySelect = { viewModel.selectSubcategory(it) },
                         onItemClick = { viewModel.selectItemForDetail(it) },
                         onEscrowBuyClick = {
                             viewModel.selectItemForDetail(it)

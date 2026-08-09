@@ -195,6 +195,10 @@ fun CollectibleCard(
 fun getCategoryIcon(category: String): ImageVector {
     return when (category.uppercase()) {
         "CARDS", "TRADING CARDS" -> Icons.Default.Style
+        "POKÉMON & TCG", "POKEMON & TCG", "POKEMON" -> Icons.Default.AutoAwesome
+        "DIECAST & MODELS", "DIECAST" -> Icons.Default.DirectionsCar
+        "APPAREL & STREETWEAR", "CLOTHING" -> Icons.Default.Checkroom
+        "TRENDING & POP CULTURE", "TRENDING" -> Icons.Default.Whatshot
         "COMICS", "COMIC BOOKS" -> Icons.Default.Book
         "WATCHES", "LUXURY WATCHES" -> Icons.Default.Watch
         "SNEAKERS" -> Icons.Default.DirectionsRun
