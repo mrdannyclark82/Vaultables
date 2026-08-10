@@ -24,7 +24,8 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.d("MainActivity", "FirebaseApp initialization notice: ${e.message}")
         }
-        PaymentConfiguration.init(applicationContext, "pk_test_TYooMQauvdEDq54NiTphI7jx")
+        val stripeKey = try { BuildConfig.STRIPE_PUBLISHABLE_KEY } catch (e: Exception) { "pk_test_TYooMQauvdEDq54NiTphI7jx" }
+        PaymentConfiguration.init(applicationContext, stripeKey)
         enableEdgeToEdge()
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()

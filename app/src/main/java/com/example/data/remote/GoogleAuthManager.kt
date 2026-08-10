@@ -86,10 +86,11 @@ object GoogleAuthManager {
         onSuccess: (UserAccount) -> Unit,
         onError: (String) -> Unit
     ) {
+        val clientId = try { com.example.BuildConfig.GOOGLE_WEB_CLIENT_ID } catch (e: Exception) { "31438583-c761-49b7-9079-54a7888b5567.apps.googleusercontent.com" }
         // Build Google ID Option for CredentialManager
         val googleIdOption = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(false)
-            .setServerClientId("31438583-c761-49b7-9079-54a7888b5567.apps.googleusercontent.com")
+            .setServerClientId(clientId)
             .setAutoSelectEnabled(false)
             .build()
 
