@@ -106,8 +106,8 @@ object GeminiService {
                             })
                             if (base64Image != null) {
                                 put(JSONObject().apply {
-                                    put("inline_data", JSONObject().apply {
-                                        put("mime_type", "image/jpeg")
+                                    put("inlineData", JSONObject().apply {
+                                        put("mimeType", "image/jpeg")
                                         put("data", base64Image)
                                     })
                                 })

@@ -6,9 +6,11 @@ import com.example.data.remote.FirestoreSyncManager
 import com.example.data.remote.GeminiService
 import com.example.data.remote.NetworkModule
 import com.example.data.remote.EscrowPaymentRequest
+import com.example.data.remote.AiAppraisalResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import java.util.Base64
+import android.util.Base64
+import java.nio.charset.StandardCharsets
 
 class VaultRepository(private val db: AppDatabase) {
 
@@ -370,7 +372,52 @@ class VaultRepository(private val db: AppDatabase) {
         year: String = "",
         localImagePath: String? = null
     ): CollectibleItem {
-        val appraisal = GeminiService.analyzeAndAppraise(title, category, description)
+        var base64Image = ""
+        if (localImagePath != null) {
+            try {
+                val uri = android.net.Uri.parse(localImagePath)
+                val file = java.io.File(uri.path!!)
+                val bytes = file.readBytes()
+                base64Image = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } catch (e: Exception) {
+                android.util.Log.e("VaultRepository", "Failed to encode image for backend scanner", e)
+            }
+        }
+
+        val appraisal: AiAppraisalResult = try {
+            // 1. Attempt to hit the launch-ready backend Scanner Service
+            val request = com.example.data.remote.ScannerRequest(base64Image, category, description)
+            val response = NetworkModule.scannerService.analyzeCollectible(request)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                AiAppraisalResult(
+                    detectedTitle = body.detectedTitle,
+                    detectedName = body.detectedName,
+                    detectedBrand = body.detectedBrand,
+                    detectedYear = body.detectedYear,
+                    grade = body.grade,
+                    certSerialNumber = body.certSerialNumber,
+                    gradingCompany = body.gradingCompany,
+                    centeringGrade = body.centeringGrade,
+                    cornersGrade = body.cornersGrade,
+                    edgesGrade = body.edgesGrade,
+                    surfaceGrade = body.surfaceGrade,
+                    authenticityScore = body.authenticityScore,
+                    estimatedValueUsd = body.estimatedValueUsd,
+                    marketTrend = body.marketTrend,
+                    highlights = body.highlights,
+                    vaultHashId = body.vaultHashId,
+                    fullAnalysis = body.fullAnalysis
+                )
+            } else {
+                throw Exception("Backend server returned error: ${response.code()}")
+            }
+        } catch (e: Exception) {
+            // 2. Developer Fallback: If backend server is offline, use local Gemini SDK directly
+            android.util.Log.d("VaultRepository", "Backend Scanner offline. Falling back to local Gemini API...")
+            GeminiService.analyzeAndAppraise(title, category, description, localImagePath)
+        }
+
         val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
         val finalBrand = if (brand.isNotBlank()) brand else appraisal.detectedBrand
         val finalYear = if (year.isNotBlank()) year else appraisal.detectedYear
@@ -481,8 +528,8 @@ class VaultRepository(private val db: AppDatabase) {
 
     // Simple E2EE AES-Style Base64 Simulation
     private fun encryptE2EE(plainText: String): String {
-        val bytes = plainText.toByteArray(Charsets.UTF_8)
-        return "E2EE-AES256:" + Base64.getEncoder().encodeToString(bytes)
+        val bytes = plainText.toByteArray(StandardCharsets.UTF_8)
+        return "E2EE-AES256:" + Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
     fun convertCurrency(amountUsd: Double, targetCurrency: CurrencyCode): String {
