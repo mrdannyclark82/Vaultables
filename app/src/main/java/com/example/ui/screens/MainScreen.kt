@@ -74,13 +74,13 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "VAULT",
+                                        text = "VAULTABLES",
                                         fontWeight = FontWeight.Black,
                                         fontSize = 18.sp,
                                         letterSpacing = 1.sp
                                     )
                                     Text(
-                                        text = "Collectibles Exchange & AI Authenticator",
+                                        text = "Authentic Collectibles Exchange & AI Verification",
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

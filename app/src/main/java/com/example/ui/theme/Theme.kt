@@ -8,39 +8,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val VaultDarkColorScheme = darkColorScheme(
-    primary = LavenderAccent,
-    onPrimary = Color(0xFF121212),
+    primary = ElectricCyanBright,
+    onPrimary = Color.Black,
     primaryContainer = DeepPurpleContainer,
     onPrimaryContainer = Color.White,
     secondary = SoftIndigoAccent,
-    onSecondary = Color(0xFF121212),
+    onSecondary = Color.Black,
     tertiary = EmeraldVerified,
-    onTertiary = Color(0xFF121212),
+    onTertiary = Color.Black,
     background = ObsidianBackground,
     onBackground = Color.White,
     surface = CharcoalSurface,
     onSurface = Color.White,
     surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = Color(0xFFE0E0E0),
+    onSurfaceVariant = Color(0xFF94A3B8),
     error = RoseError,
-    onError = Color.White
+    onError = Color.Black
 )
 
-private val VaultLightColorScheme = darkColorScheme(
-    primary = LavenderAccent,
-    onPrimary = Color(0xFF121212),
-    primaryContainer = DeepPurpleContainer,
-    onPrimaryContainer = Color.White,
-    secondary = SoftIndigoAccent,
-    onSecondary = Color(0xFF121212),
+private val VaultLightColorScheme = lightColorScheme(
+    primary = Color(0xFF0284C7), // Vibrant Sapphire Blue for Light Mode
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE0F2FE),
+    onPrimaryContainer = Color(0xFF0369A1),
+    secondary = Color(0xFF06B6D4), // Electric Cyan
+    onSecondary = Color.White,
     tertiary = EmeraldVerified,
-    onTertiary = Color(0xFF121212),
-    background = ObsidianBackground,
-    onBackground = Color.White,
-    surface = CharcoalSurface,
-    onSurface = Color.White,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = Color(0xFFE0E0E0),
+    onTertiary = Color.White,
+    background = LightBackground,
+    onBackground = Color(0xFF0F172A),
+    surface = LightSurface,
+    onSurface = Color(0xFF0F172A),
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = Color(0xFF64748B),
     error = RoseError,
     onError = Color.White
 )
@@ -50,7 +50,7 @@ fun VaultTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = VaultDarkColorScheme
+    val colorScheme = if (darkTheme) VaultDarkColorScheme else VaultLightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,

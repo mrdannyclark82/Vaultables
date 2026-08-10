@@ -3,13 +3,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Outer Shield Frame -->
     <path
-        android:fillColor="#D4AF37"
-        android:pathData="M54,28 L78,38 V58 C78,72 68,82 54,86 C40,82 30,72 30,58 V38 Z" />
+        android:fillColor="#06B6D4"
+        android:pathData="M54,24 L78,34 V54 C78,70 67,81 54,85 C41,81 30,70 30,54 V34 Z" />
+    <!-- Inner Dark Shield -->
     <path
-        android:fillColor="#12131A"
-        android:pathData="M54,33 L73,41 V57 C73,68 64,77 54,80 C44,77 35,68 35,57 V41 Z" />
+        android:fillColor="#0F172A"
+        android:pathData="M54,28 L74,37 V53 C74,66 65,76 54,80 C43,76 34,66 34,53 V37 Z" />
+    <!-- Cyan Vault Door Circle Outer -->
     <path
-        android:fillColor="#10B981"
-        android:pathData="M54,44 L63,54 L54,66 L45,54 Z" />
+        android:pathData="M54,36 A18,18 0 1,0 54,72 A18,18 0 1,0 54,36"
+        android:strokeWidth="3"
+        android:strokeColor="#22D3EE"
+        android:fillColor="#00000000" />
+    <!-- Vault Wheel Center Hub -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M54,48 A6,6 0 1,0 54,60 A6,6 0 1,0 54,48" />
+    <!-- Vault Door Locking Spokes -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M52,38 H56 V48 H52 Z M52,60 H56 V70 H52 Z M38,52 H48 V56 H38 Z M60,52 H70 V56 H60 Z" />
 </vector>

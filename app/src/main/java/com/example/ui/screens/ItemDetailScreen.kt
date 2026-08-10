@@ -301,8 +301,15 @@ fun ItemDetailScreen(
                                 tint = EmeraldVerified
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            val certTitle = when {
+                                item.gradingCompany.contains("Beckett", ignoreCase = true) || item.gradingCompany.contains("BGS", ignoreCase = true) -> "Beckett (BGS) Official Slab Certification"
+                                item.gradingCompany.contains("PSA", ignoreCase = true) -> "PSA Official Slab Certification"
+                                item.gradingCompany.contains("CGC", ignoreCase = true) -> "CGC Official Slab Certification"
+                                item.gradingCompany.contains("SGC", ignoreCase = true) -> "SGC Official Slab Certification"
+                                else -> "Vaultables AI Internal Certification Ledger"
+                            }
                             Text(
-                                text = "${item.gradingCompany} Official Slab & Grading Certification",
+                                text = certTitle,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -339,15 +346,29 @@ fun ItemDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
+                                val certHeader = when {
+                                    item.gradingCompany.contains("Beckett", ignoreCase = true) || item.gradingCompany.contains("BGS", ignoreCase = true) -> "BECKETT CERT #"
+                                    item.gradingCompany.contains("PSA", ignoreCase = true) -> "PSA CERT #"
+                                    item.gradingCompany.contains("CGC", ignoreCase = true) -> "CGC CERT #"
+                                    item.gradingCompany.contains("SGC", ignoreCase = true) -> "SGC CERT #"
+                                    else -> "VAULTABLES CERT #"
+                                }
+                                val displayCertNumber = when {
+                                    item.gradingCompany.contains("Beckett", ignoreCase = true) || item.gradingCompany.contains("BGS", ignoreCase = true) ||
+                                    item.gradingCompany.contains("PSA", ignoreCase = true) || item.gradingCompany.contains("CGC", ignoreCase = true) || item.gradingCompany.contains("SGC", ignoreCase = true) ->
+                                        item.certSerialNumber.ifBlank { item.vaultHashId }
+                                    else ->
+                                        if (item.certSerialNumber.startsWith("VAULT-CERT-")) item.certSerialNumber else "VAULT-CERT-${item.vaultHashId.takeLast(8)}"
+                                }
                                 Text(
-                                    text = "OFFICIAL CERTIFICATION SERIAL #",
+                                    text = certHeader,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = item.certSerialNumber.ifBlank { item.vaultHashId },
+                                    text = displayCertNumber,
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = GoldAccent,

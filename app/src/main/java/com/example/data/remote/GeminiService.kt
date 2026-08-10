@@ -135,7 +135,20 @@ object GeminiService {
             val analysis = parsed.optString("fullAnalysis", "AI Holographic corner and centering inspection completed. Standard authentic issue.")
 
             val randomHash = "VAULT-${(1000..9999).random()}-${(1000..9999).random()}-2026"
-            val certNum = "PSA-${(10000000..99999999).random()}"
+            val detectedGradingCompany = when {
+                title.contains("BGS", ignoreCase = true) || title.contains("Beckett", ignoreCase = true) -> "Beckett BGS"
+                title.contains("PSA", ignoreCase = true) -> "PSA"
+                title.contains("CGC", ignoreCase = true) -> "CGC"
+                title.contains("SGC", ignoreCase = true) -> "SGC"
+                else -> "Vaultables AI"
+            }
+            val certNum = when (detectedGradingCompany) {
+                "Beckett BGS" -> "BGS-${(10000000..99999999).random()}"
+                "PSA" -> "PSA-${(10000000..99999999).random()}"
+                "CGC" -> "CGC-${(10000000..99999999).random()}"
+                "SGC" -> "SGC-${(10000000..99999999).random()}"
+                else -> "VAULT-CERT-${(10000000..99999999).random()}"
+            }
 
             AiAppraisalResult(
                 detectedTitle = if (parsedTitle.isNotBlank()) parsedTitle else title,
@@ -144,7 +157,7 @@ object GeminiService {
                 detectedYear = parsedYear,
                 grade = grade,
                 certSerialNumber = certNum,
-                gradingCompany = if (category.contains("CARD", ignoreCase = true)) "PSA" else "VAULT AI",
+                gradingCompany = detectedGradingCompany,
                 centeringGrade = 9.8f,
                 cornersGrade = 10.0f,
                 edgesGrade = 9.8f,
@@ -164,7 +177,20 @@ object GeminiService {
     private fun fallbackAppraisal(title: String, category: String): AiAppraisalResult {
         val baseVal = defaultPriceFor(category)
         val hash = "VAULT-${(1000..9999).random()}-${(1000..9999).random()}-2026"
-        val certNum = "PSA-${(10000000..99999999).random()}"
+        val detectedGradingCompany = when {
+            title.contains("BGS", ignoreCase = true) || title.contains("Beckett", ignoreCase = true) -> "Beckett BGS"
+            title.contains("PSA", ignoreCase = true) -> "PSA"
+            title.contains("CGC", ignoreCase = true) -> "CGC"
+            title.contains("SGC", ignoreCase = true) -> "SGC"
+            else -> "Vaultables AI"
+        }
+        val certNum = when (detectedGradingCompany) {
+            "Beckett BGS" -> "BGS-${(10000000..99999999).random()}"
+            "PSA" -> "PSA-${(10000000..99999999).random()}"
+            "CGC" -> "CGC-${(10000000..99999999).random()}"
+            "SGC" -> "SGC-${(10000000..99999999).random()}"
+            else -> "VAULT-CERT-${(10000000..99999999).random()}"
+        }
         val detectedYear = extractEntityYear(title)
         val detectedName = extractEntityName(title)
         val detectedBrand = extractEntityBrand(title, category)
@@ -181,7 +207,7 @@ object GeminiService {
             detectedYear = detectedYear,
             grade = "9.8 Gem Mint",
             certSerialNumber = certNum,
-            gradingCompany = if (category.contains("CARD", ignoreCase = true)) "PSA" else "VAULT AI",
+            gradingCompany = detectedGradingCompany,
             centeringGrade = 9.8f,
             cornersGrade = 10.0f,
             edgesGrade = 9.8f,

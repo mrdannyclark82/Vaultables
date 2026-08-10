@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Vault"
+rootProject.name = "Vaultables"
 
 include(":app")

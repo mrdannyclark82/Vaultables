@@ -107,7 +107,7 @@ fun MyVaultScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "VAULT PORTFOLIO VALUATION",
+                                text = "VAULTABLES PORTFOLIO VALUATION",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = GoldAccent,
@@ -164,7 +164,7 @@ fun MyVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "+8.4% past 30 days • ${items.size} Verified Vault Items",
+                            text = "+8.4% past 30 days • ${items.size} Verified Vaultables Items",
                             fontSize = 12.sp,
                             color = EmeraldVerified,
                             fontWeight = FontWeight.Medium

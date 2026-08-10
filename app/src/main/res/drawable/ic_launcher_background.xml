@@ -13,15 +13,15 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#0D0F17" android:offset="0.0" />
-                <item android:color="#1A1D2D" android:offset="1.0" />
+                <item android:color="#080E1A" android:offset="0.0" />
+                <item android:color="#0F172A" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
-    <!-- Subtle gold metallic ring background -->
+    <!-- Cyan tech ring background -->
     <path
-        android:pathData="M54,24 A30,30 0 1,0 54,84 A30,30 0 1,0 54,24"
-        android:strokeWidth="1.5"
-        android:strokeColor="#33D4AF37"
+        android:pathData="M54,20 A34,34 0 1,0 54,88 A34,34 0 1,0 54,20"
+        android:strokeWidth="2"
+        android:strokeColor="#4006B6D4"
         android:fillColor="#00000000" />
 </vector>

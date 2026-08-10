@@ -220,12 +220,12 @@ fun ProfileHubScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Vault Portfolio Breakdown",
+                        text = "Vaultables Portfolio Breakdown",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
                     Text(
-                        text = "Level 8 Vault Master",
+                        text = "Level 8 Vaultables Master",
                         fontSize = 11.sp,
                         color = GoldAccent,
                         fontWeight = FontWeight.Bold
@@ -483,7 +483,7 @@ fun ProfileHubScreen(
                         Icon(imageVector = Icons.Default.TableChart, contentDescription = "CSV Ledger", tint = EmeraldVerified)
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(text = "Export Vault Insurance CSV Ledger", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(text = "Export Vaultables Insurance CSV Ledger", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(text = "Download structured spreadsheet for insurance appraisal & taxes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }

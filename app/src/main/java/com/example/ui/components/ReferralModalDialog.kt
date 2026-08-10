@@ -225,7 +225,7 @@ fun ReferralModalDialog(
                         IconButton(onClick = {
                             val sendIntent = Intent().apply {
                                 action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, "Join me on Vault Collectibles Exchange! Use my referral link $shareLink to get $15 escrow credit on your first item authentication.")
+                                putExtra(Intent.EXTRA_TEXT, "Join me on Vaultables Exchange! Use my referral link $shareLink to get $15 escrow credit on your first item authentication.")
                                 type = "text/plain"
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Share Referral Link"))
