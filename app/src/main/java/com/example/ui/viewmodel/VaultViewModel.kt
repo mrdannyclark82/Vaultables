@@ -36,7 +36,9 @@ data class VaultUiState(
     val showNotificationDrawer: Boolean = false,
     val showActivityReportDialog: Boolean = false,
     val isScanningInProgress: Boolean = false,
-    val scanStatusMessage: String = ""
+    val scanStatusMessage: String = "",
+    val paymentClientSecret: String? = null,
+    val paymentError: String? = null
 )
 
 class VaultViewModel(application: Application) : AndroidViewModel(application) {
@@ -170,7 +172,8 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         description: String,
         imageType: String,
         brand: String = "",
-        year: String = ""
+        year: String = "",
+        localImagePath: String? = null
     ) {
         viewModelScope.launch {
             _uiState.update {
@@ -185,7 +188,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing & grading ledger...") }
             kotlinx.coroutines.delay(800)
 
-            val added = repository.addNewCollectible(title, category, description, imageType, brand, year)
+            val added = repository.addNewCollectible(title, category, description, imageType, brand, year, localImagePath)
 
             _uiState.update {
                 it.copy(
@@ -200,10 +203,29 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createEscrowTrade(item: CollectibleItem, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
-            val currCode = _uiState.value.selectedCurrency.code
-            repository.createEscrow(item, buyerName, currCode, feePercentage)
-            _uiState.update { it.copy(showEscrowDialog = false) }
+            try {
+                // Simulate hitting the Vaultables backend to get a PaymentIntent for Stripe
+                val response = repository.createStripePaymentIntent(item.id, item.estimatedValueUsd, buyerName)
+                _uiState.update { it.copy(paymentClientSecret = response.clientSecret, paymentError = null, showEscrowDialog = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(paymentError = e.message, showEscrowDialog = false) }
+            }
         }
+    }
+
+    fun onPaymentSheetResult(success: Boolean, item: CollectibleItem?, buyerName: String, feePercentage: Double = 3.5) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(paymentClientSecret = null, paymentError = null) }
+            if (success && item != null) {
+                val currCode = _uiState.value.selectedCurrency.code
+                repository.createEscrow(item, buyerName, currCode, feePercentage)
+                _uiState.update { it.copy(showEscrowDialog = false) }
+            }
+        }
+    }
+
+    fun clearPaymentError() {
+        _uiState.update { it.copy(paymentError = null) }
     }
 
     fun confirmEscrowBuyer(escrowId: Long) {

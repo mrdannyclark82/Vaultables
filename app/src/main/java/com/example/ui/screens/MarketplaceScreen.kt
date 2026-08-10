@@ -199,12 +199,21 @@ fun MarketplaceScreen(
                                         .background(MaterialTheme.colorScheme.surfaceVariant),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = getCategoryIcon(item.category),
-                                        contentDescription = item.category,
-                                        tint = GoldAccent,
-                                        modifier = Modifier.size(30.dp)
-                                    )
+                                    if (item.localImagePath != null) {
+                                        coil.compose.AsyncImage(
+                                            model = item.localImagePath,
+                                            contentDescription = item.category,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = getCategoryIcon(item.category),
+                                            contentDescription = item.category,
+                                            tint = GoldAccent,
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.width(14.dp))

@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.example.data.model.CollectibleItem
 import com.example.ui.theme.BlueEscrow
 import com.example.ui.theme.EmeraldVerified
@@ -61,14 +63,23 @@ fun CollectibleCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                // Category Icon Illustration
-                val categoryIcon = getCategoryIcon(item.category)
-                Icon(
-                    imageVector = categoryIcon,
-                    contentDescription = item.category,
-                    modifier = Modifier.size(48.dp),
-                    tint = GoldAccent.copy(alpha = 0.85f)
-                )
+                if (item.localImagePath != null) {
+                    AsyncImage(
+                        model = item.localImagePath,
+                        contentDescription = "Captured Image",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    // Category Icon Illustration
+                    val categoryIcon = getCategoryIcon(item.category)
+                    Icon(
+                        imageVector = categoryIcon,
+                        contentDescription = item.category,
+                        modifier = Modifier.size(48.dp),
+                        tint = GoldAccent.copy(alpha = 0.85f)
+                    )
+                }
 
                 // Top Left Authenticity Tag
                 Row(

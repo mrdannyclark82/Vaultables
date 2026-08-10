@@ -4,6 +4,8 @@ import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.remote.FirestoreSyncManager
 import com.example.data.remote.GeminiService
+import com.example.data.remote.NetworkModule
+import com.example.data.remote.EscrowPaymentRequest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.util.Base64
@@ -365,7 +367,8 @@ class VaultRepository(private val db: AppDatabase) {
         description: String,
         imageType: String,
         brand: String = "",
-        year: String = ""
+        year: String = "",
+        localImagePath: String? = null
     ): CollectibleItem {
         val appraisal = GeminiService.analyzeAndAppraise(title, category, description)
         val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
@@ -392,7 +395,8 @@ class VaultRepository(private val db: AppDatabase) {
             salePriceUsd = appraisal.estimatedValueUsd,
             imageType = imageType,
             brandName = finalBrand,
-            releaseYear = finalYear
+            releaseYear = finalYear,
+            localImagePath = localImagePath
         )
         val id = db.collectibleDao().insertItem(newItem)
         val savedItem = newItem.copy(id = id)
@@ -488,6 +492,17 @@ class VaultRepository(private val db: AppDatabase) {
             CurrencyCode.EUR -> String.format("€%.2f EUR", converted)
             CurrencyCode.GBP -> String.format("£%.2f GBP", converted)
             CurrencyCode.JPY -> String.format("¥%,.0f JPY", converted)
+        }
+    }
+
+    suspend fun createStripePaymentIntent(itemId: Long, amountUsd: Double, buyerName: String): com.example.data.remote.EscrowPaymentResponse {
+        val req = EscrowPaymentRequest(itemId, amountUsd, buyerName)
+        val response = NetworkModule.paymentService.createEscrowPaymentIntent(req)
+        if (response.isSuccessful) {
+            return response.body() ?: throw Exception("Empty response from Escrow Server")
+        } else {
+            // Real integration will throw 404 or connection exception since the server doesn't exist yet
+            throw Exception("Failed to contact Escrow Server: HTTP ${response.code()}. Backend must be configured.")
         }
     }
 

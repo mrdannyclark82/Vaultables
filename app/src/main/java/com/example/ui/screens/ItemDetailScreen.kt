@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.example.data.model.CollectibleItem
 import com.example.ui.components.getCategoryIcon
 import com.example.ui.theme.BlueEscrow
@@ -134,12 +136,21 @@ fun ItemDetailScreen(
                     .border(1.dp, GoldAccent.copy(alpha = 0.5f), RoundedCornerShape(20.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = getCategoryIcon(item.category),
-                    contentDescription = item.category,
-                    tint = GoldAccent,
-                    modifier = Modifier.size(80.dp)
-                )
+                if (item.localImagePath != null) {
+                    AsyncImage(
+                        model = item.localImagePath,
+                        contentDescription = "Captured Image",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = getCategoryIcon(item.category),
+                        contentDescription = item.category,
+                        tint = GoldAccent,
+                        modifier = Modifier.size(80.dp)
+                    )
+                }
 
                 // Grade Tag Badge
                 Box(

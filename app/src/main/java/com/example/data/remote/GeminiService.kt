@@ -10,6 +10,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import android.graphics.BitmapFactory
+import android.util.Base64
+import java.io.File
+import android.net.Uri
 
 data class AiAppraisalResult(
     val detectedTitle: String = "",
@@ -32,7 +36,7 @@ data class AiAppraisalResult(
 )
 
 object GeminiService {
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -43,7 +47,8 @@ object GeminiService {
     suspend fun analyzeAndAppraise(
         title: String,
         category: String,
-        notes: String
+        notes: String,
+        localImagePath: String? = null
     ): AiAppraisalResult = withContext(Dispatchers.IO) {
         val apiKey = BuildConfig.GEMINI_API_KEY
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
@@ -51,7 +56,8 @@ object GeminiService {
         }
 
         val promptText = """
-            You are Vault AI, an expert collectible authenticator, optical entity recognition identifier, PSA/BGS grading specialist, and market appraiser.
+            You are Vaultables AI, an expert collectible authenticator, optical entity recognition identifier, PSA/BGS grading specialist, and market appraiser.
+            Act as a fusion engine that has been trained on Hugging Face (GotThatData/sports-cards), Roboflow Universe instance segmentation datasets for bounding box extraction, Junk Wax Hero for vintage baseball, and queries the CardSight REST API for real-time market valuations.
             Analyze and identify the following collectible item from input scan/text:
             Title: $title
             Category: $category
@@ -79,6 +85,18 @@ object GeminiService {
         """.trimIndent()
 
         try {
+            var base64Image: String? = null
+            if (localImagePath != null) {
+                try {
+                    val uri = Uri.parse(localImagePath)
+                    val file = File(uri.path!!)
+                    val bytes = file.readBytes()
+                    base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                } catch (e: Exception) {
+                    android.util.Log.e("GeminiService", "Failed to encode image", e)
+                }
+            }
+
             val jsonBody = JSONObject().apply {
                 put("contents", JSONArray().apply {
                     put(JSONObject().apply {
@@ -86,6 +104,14 @@ object GeminiService {
                             put(JSONObject().apply {
                                 put("text", promptText)
                             })
+                            if (base64Image != null) {
+                                put(JSONObject().apply {
+                                    put("inline_data", JSONObject().apply {
+                                        put("mime_type", "image/jpeg")
+                                        put("data", base64Image)
+                                    })
+                                })
+                            }
                         })
                     })
                 })

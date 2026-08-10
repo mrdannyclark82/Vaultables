@@ -12,6 +12,7 @@ import com.example.ui.screens.MainScreen
 import com.example.ui.theme.VaultTheme
 import com.example.ui.viewmodel.VaultViewModel
 import com.google.firebase.FirebaseApp
+import com.stripe.android.PaymentConfiguration
 
 class MainActivity : ComponentActivity() {
     private val viewModel: VaultViewModel by viewModels()
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.d("MainActivity", "FirebaseApp initialization notice: ${e.message}")
         }
+        PaymentConfiguration.init(applicationContext, "pk_test_TYooMQauvdEDq54NiTphI7jx")
         enableEdgeToEdge()
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()

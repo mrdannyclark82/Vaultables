@@ -21,6 +21,11 @@ import com.example.ui.theme.BlueEscrow
 import com.example.ui.theme.EmeraldVerified
 import com.example.ui.theme.GoldAccent
 import com.example.ui.viewmodel.VaultViewModel
+import com.stripe.android.paymentsheet.PaymentSheet
+import com.stripe.android.paymentsheet.PaymentSheetResult
+import com.stripe.android.paymentsheet.rememberPaymentSheet
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 
 import androidx.compose.ui.platform.LocalContext
 
@@ -40,6 +45,46 @@ fun MainScreen(
     val allReviews by viewModel.allReviews.collectAsStateWithLifecycle()
 
     val unreadAlertsCount = allAlerts.count { !it.isRead }
+    val paymentSheet = rememberPaymentSheet(
+        paymentResultCallback = { paymentResult ->
+            when (paymentResult) {
+                is PaymentSheetResult.Completed -> {
+                    viewModel.onPaymentSheetResult(true, uiState.selectedItemForDetail, uiState.currentUser.displayName ?: "Buyer")
+                    Toast.makeText(context, "Payment Successful!", Toast.LENGTH_SHORT).show()
+                }
+                is PaymentSheetResult.Canceled -> {
+                    viewModel.clearPaymentError()
+                    Toast.makeText(context, "Payment Canceled", Toast.LENGTH_SHORT).show()
+                }
+                is PaymentSheetResult.Failed -> {
+                    viewModel.onPaymentSheetResult(false, null, "")
+                    Toast.makeText(context, "Payment Failed", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    )
+
+    LaunchedEffect(uiState.paymentClientSecret) {
+        uiState.paymentClientSecret?.let { secret ->
+            val configuration = PaymentSheet.Configuration(
+                merchantDisplayName = "Vaultables Escrow",
+                googlePay = PaymentSheet.GooglePayConfiguration(
+                    environment = PaymentSheet.GooglePayConfiguration.Environment.Test,
+                    countryCode = "US",
+                    currencyCode = uiState.selectedCurrency.code
+                )
+            )
+            paymentSheet.presentWithPaymentIntent(secret, configuration)
+        }
+    }
+
+    LaunchedEffect(uiState.paymentError) {
+        uiState.paymentError?.let { error ->
+            Toast.makeText(context, "Escrow Error: $error", Toast.LENGTH_LONG).show()
+            viewModel.clearPaymentError()
+        }
+    }
+
 
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.selectedItemForDetail != null) {
@@ -286,8 +331,8 @@ fun MainScreen(
                 isScanning = uiState.isScanningInProgress,
                 scanMessage = uiState.scanStatusMessage,
                 onDismiss = { viewModel.setShowAiScanner(false) },
-                onConfirmScan = { title, cat, desc, imgType, brand, year ->
-                    viewModel.scanAndAddCollectible(title, cat, desc, imgType, brand, year)
+                onConfirmScan = { title, cat, desc, imgType, brand, year, localImagePath ->
+                    viewModel.scanAndAddCollectible(title, cat, desc, imgType, brand, year, localImagePath)
                 }
             )
         }

@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import coil.compose.AsyncImage
+import android.net.Uri
 import com.example.data.model.CollectibleCategory
 import com.example.ui.theme.EmeraldVerified
 import com.example.ui.theme.GoldAccent
@@ -43,7 +45,7 @@ fun AiScannerModal(
     isScanning: Boolean,
     scanMessage: String,
     onDismiss: () -> Unit,
-    onConfirmScan: (title: String, category: String, desc: String, imageType: String, brand: String, year: String) -> Unit,
+    onConfirmScan: (title: String, category: String, desc: String, imageType: String, brand: String, year: String, localImagePath: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var titleInput by remember { mutableStateOf("") }
@@ -52,11 +54,12 @@ fun AiScannerModal(
     var yearInput by remember { mutableStateOf("") }
     var descInput by remember { mutableStateOf("") }
     var isLiveCameraActive by remember { mutableStateOf(true) }
+    var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "scanner")
     val laserY by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 180f,
+        targetValue = 300f,
         animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -111,7 +114,7 @@ fun AiScannerModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(2.dp)
-                                .offset(y = laserY.dp - 90.dp)
+                                .offset(y = laserY.dp - 150.dp)
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(Color.Transparent, GoldAccent, EmeraldVerified, GoldAccent, Color.Transparent)
@@ -152,16 +155,36 @@ fun AiScannerModal(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .height(300.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black)
                             .border(1.dp, GoldAccent.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isLiveCameraActive) {
-                            CameraScanPreviewView(
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            if (capturedImageUri != null) {
+                                AsyncImage(model = capturedImageUri, contentDescription = "Captured Image", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            } else {
+                                CameraScanPreviewView(
+                                    onImageCaptured = { 
+                                        capturedImageUri = it 
+                                        val finalTitle = titleInput.ifBlank { "${selectedCategory.displayName} Collectible" }
+                                        onConfirmScan(
+                                            finalTitle,
+                                            selectedCategory.displayName,
+                                            descInput.ifBlank { "Scanned via Live Camera & Gemini AI Optical Identifier" },
+                                            selectedCategory.name,
+                                            brandInput,
+                                            yearInput,
+                                            it?.toString()
+                                        )
+                                    },
+                                    onSimulateScan = {
+                                        // No-op, now handled in onImageCaptured
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         } else {
                             Icon(
                                 imageVector = Icons.Default.CameraAlt,
@@ -174,7 +197,7 @@ fun AiScannerModal(
                         // Scanning Reticle Overlay
                         Box(
                             modifier = Modifier
-                                .size(130.dp, 130.dp)
+                                .size(220.dp, 220.dp)
                                 .border(1.dp, GoldAccent, RoundedCornerShape(8.dp))
                         )
 
@@ -183,7 +206,7 @@ fun AiScannerModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(2.dp)
-                                .offset(y = laserY.dp - 90.dp)
+                                .offset(y = laserY.dp - 150.dp)
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(Color.Transparent, GoldAccent, EmeraldVerified, Color.Transparent)
@@ -340,7 +363,8 @@ fun AiScannerModal(
                             descInput.ifBlank { "Scanned via Live Camera & Gemini AI Optical Identifier" },
                             selectedCategory.name,
                             brandInput,
-                            yearInput
+                            yearInput,
+                            capturedImageUri?.toString()
                         )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
@@ -365,6 +389,8 @@ fun AiScannerModal(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun CameraScanPreviewView(
+    onImageCaptured: (Uri?) -> Unit,
+    onSimulateScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -372,33 +398,71 @@ fun CameraScanPreviewView(
     val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
 
     if (cameraPermissionState.status.isGranted) {
-        AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                }
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                cameraProviderFuture.addListener({
-                    try {
-                        val cameraProvider = cameraProviderFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
-                        }
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview
-                        )
-                    } catch (exc: Exception) {
-                        Log.e("CameraScanPreview", "Camera bind exception", exc)
+        var imageCapture by remember { mutableStateOf<androidx.camera.core.ImageCapture?>(null) }
+        Box(modifier = modifier) {
+            AndroidView(
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
                     }
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
-            },
-            modifier = modifier
-        )
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                    cameraProviderFuture.addListener({
+                        try {
+                            val cameraProvider = cameraProviderFuture.get()
+                            val preview = Preview.Builder().build().also {
+                                it.setSurfaceProvider(previewView.surfaceProvider)
+                            }
+                            
+                            val capture = androidx.camera.core.ImageCapture.Builder().build()
+                            imageCapture = capture
+                            
+                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                cameraSelector,
+                                preview,
+                                capture
+                            )
+                        } catch (exc: Exception) {
+                            Log.e("CameraScanPreview", "Camera bind exception", exc)
+                        }
+                    }, ContextCompat.getMainExecutor(ctx))
+                    previewView
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+            Button(
+                onClick = {
+                    val capture = imageCapture ?: return@Button
+                    val file = java.io.File(context.cacheDir, "scan_${System.currentTimeMillis()}.jpg")
+                    val outputOptions = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(file).build()
+                    capture.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(outputFileResults: androidx.camera.core.ImageCapture.OutputFileResults) {
+                                val savedUri = android.net.Uri.fromFile(file)
+                                onImageCaptured(savedUri)
+                                onSimulateScan()
+                            }
+                            override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                                Log.e("CameraScanPreview", "Photo capture failed", exception)
+                                onSimulateScan()
+                            }
+                        }
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent.copy(alpha = 0.9f)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Camera, contentDescription = "Capture", tint = Color.Black)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Capture & Analyze", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
     } else {
         Box(
             modifier = modifier
