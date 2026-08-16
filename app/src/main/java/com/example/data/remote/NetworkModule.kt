@@ -6,7 +6,8 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkModule {
-    private const val ESCROW_API_BASE_URL = "https://api.vaultables.com"
+    // Hosting rewrite is live on the default site until api.vaultables.com DNS exists.
+    private const val ESCROW_API_BASE_URL = "https://vaultables.web.app/"
 
     val paymentService: PaymentService by lazy {
         val client = OkHttpClient.Builder()
