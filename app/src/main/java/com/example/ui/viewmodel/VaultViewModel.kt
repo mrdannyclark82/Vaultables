@@ -189,24 +189,33 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing & grading ledger...") }
             kotlinx.coroutines.delay(800)
 
-            val added = repository.addNewCollectible(
-                title,
-                category,
-                description,
-                imageType,
-                brand,
-                year,
-                localImagePath,
-                localBackImagePath
-            )
-
-            _uiState.update {
-                it.copy(
-                    isScanningInProgress = false,
-                    showAiScannerDialog = false,
-                    showAddCustomItemDialog = false,
-                    selectedItemForDetail = added
+            try {
+                val added = repository.addNewCollectible(
+                    title,
+                    category,
+                    description,
+                    imageType,
+                    brand,
+                    year,
+                    localImagePath,
+                    localBackImagePath
                 )
+
+                _uiState.update {
+                    it.copy(
+                        isScanningInProgress = false,
+                        showAiScannerDialog = false,
+                        showAddCustomItemDialog = false,
+                        selectedItemForDetail = added
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isScanningInProgress = false,
+                        scanStatusMessage = e.message ?: "Secure card scan failed. Please try again."
+                    )
+                }
             }
         }
     }
@@ -214,7 +223,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     fun createEscrowTrade(item: CollectibleItem, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
             try {
-                val response = repository.createStripePaymentIntent(item.id, item.estimatedValueUsd, buyerName)
+                val response = repository.createStripePaymentIntent(item)
                 _uiState.update { it.copy(paymentClientSecret = response.clientSecret, paymentError = null, showEscrowDialog = false) }
             } catch (e: Exception) {
                 _uiState.update {
@@ -230,10 +239,13 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     fun onPaymentSheetResult(success: Boolean, item: CollectibleItem?, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
             _uiState.update { it.copy(paymentClientSecret = null, paymentError = null) }
-            if (success && item != null) {
-                val currCode = _uiState.value.selectedCurrency.code
-                repository.createEscrow(item, buyerName, currCode, feePercentage)
-                _uiState.update { it.copy(showEscrowDialog = false) }
+            if (success) {
+                _uiState.update {
+                    it.copy(
+                        showEscrowDialog = false,
+                        scanStatusMessage = "Payment submitted. Escrow will appear after verified server confirmation."
+                    )
+                }
             }
         }
     }

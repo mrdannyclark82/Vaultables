@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.data.model.CollectibleItem
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -11,7 +12,7 @@ import kotlinx.coroutines.withContext
 
 object FirestoreSyncManager {
     private const val TAG = "FirestoreSyncManager"
-    private const val COLLECTION_VAULT = "user_collections"
+    private const val COLLECTION_USERS = "users"
     private const val COLLECTION_MARKETPLACE = "marketplace_items"
 
     private fun getFirestoreInstance(context: Context? = null): FirebaseFirestore? {
@@ -43,6 +44,10 @@ object FirestoreSyncManager {
             Log.d(TAG, "Firestore instance not available, skipping cloud sync.")
             return@withContext
         }
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: run {
+            Log.d(TAG, "No authenticated user, skipping cloud sync.")
+            return@withContext
+        }
         try {
             val itemData = hashMapOf(
                 "id" to item.id,
@@ -61,9 +66,11 @@ object FirestoreSyncManager {
                 "updatedAt" to System.currentTimeMillis()
             )
 
-            val docId = if (item.id != 0L) "item_${item.id}" else "item_${item.vaultHashId}"
+            val docId = item.vaultHashId.takeIf { it.isNotBlank() } ?: "item_${item.id}"
 
-            fs.collection(COLLECTION_VAULT)
+            fs.collection(COLLECTION_USERS)
+                .document(userId)
+                .collection("items")
                 .document(docId)
                 .set(itemData)
                 .await()
@@ -71,7 +78,15 @@ object FirestoreSyncManager {
             if (item.isListedForSale) {
                 fs.collection(COLLECTION_MARKETPLACE)
                     .document("market_$docId")
-                    .set(itemData)
+                    .set(
+                        itemData + mapOf(
+                            "sellerId" to userId,
+                            "priceMinor" to (item.salePriceUsd * 100).toLong(),
+                            "currency" to "usd",
+                            "visibility" to "public",
+                            "status" to "active"
+                        )
+                    )
                     .await()
             }
             Log.d(TAG, "Item '${item.title}' synced to Firestore cloud storage.")

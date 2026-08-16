@@ -4,14 +4,19 @@ import android.content.Context
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.remote.FirestoreSyncManager
-import com.example.data.remote.GeminiService
+import com.example.data.remote.CardScanImage
+import com.example.data.remote.CardScanImages
+import com.example.data.remote.FirebaseAuthTokenProvider
 import com.example.data.remote.NetworkModule
 import com.example.data.remote.EscrowPaymentRequest
-import com.example.data.remote.AiAppraisalResult
+import com.example.data.remote.CardAppraisalResult
+import com.example.data.remote.SecureScannerRequest
+import com.example.data.remote.SecureScanResultParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import android.util.Base64
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 class VaultRepository(
     private val db: AppDatabase,
@@ -387,77 +392,53 @@ class VaultRepository(
                 android.util.Log.e("VaultRepository", "Failed to encode image for backend scanner", e)
             }
         }
-
-        val isTradingCard = category == CollectibleCategory.TRADING_CARDS.displayName ||
-            category == CollectibleCategory.POKEMON_CARDS.displayName
-        val verification = if (isTradingCard && localImagePath != null) {
-            com.example.data.remote.CardVerificationService.verify(
-                context = appContext,
-                frontImageUri = localImagePath,
-                backImageUri = localBackImagePath,
-                titleHint = title,
-                brandHint = brand,
-                yearHint = year
-            )
-        } else {
-            com.example.data.remote.CardVerificationResult(emptyList(), emptyList())
+        if (base64Image.isBlank()) {
+            throw IllegalArgumentException("Unable to prepare the front card image for secure scanning.")
         }
 
-        val appraisal: AiAppraisalResult = if (isTradingCard && localImagePath != null) {
-            GeminiService.analyzeAndAppraise(
-                context = appContext,
-                title = title,
-                category = category,
-                notes = description,
-                brand = brand,
-                year = year,
-                localImagePath = localImagePath,
-                localBackImagePath = localBackImagePath,
-                verificationEvidence = verification.promptEvidence()
-            )
-        } else try {
-            // 1. Attempt to hit the launch-ready backend Scanner Service
-            val request = com.example.data.remote.ScannerRequest(base64Image, category, description)
-            val response = NetworkModule.scannerService.analyzeCollectible(request)
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                AiAppraisalResult(
-                    detectedTitle = body.detectedTitle,
-                    detectedName = body.detectedName,
-                    detectedBrand = body.detectedBrand,
-                    detectedYear = body.detectedYear,
-                    grade = body.grade,
-                    certSerialNumber = body.certSerialNumber,
-                    gradingCompany = body.gradingCompany,
-                    centeringGrade = body.centeringGrade,
-                    cornersGrade = body.cornersGrade,
-                    edgesGrade = body.edgesGrade,
-                    surfaceGrade = body.surfaceGrade,
-                    authenticityScore = body.authenticityScore,
-                    estimatedValueUsd = body.estimatedValueUsd,
-                    marketTrend = body.marketTrend,
-                    highlights = body.highlights,
-                    vaultHashId = body.vaultHashId,
-                    fullAnalysis = body.fullAnalysis
-                )
-            } else {
-                throw Exception("Backend server returned error: ${response.code()}")
+        if (localImagePath == null || localBackImagePath == null) {
+            throw IllegalArgumentException("Secure card scans require clear front and back images.")
+        }
+        val backImage = com.example.data.remote.CardImageProcessor.prepareForUpload(appContext, localBackImagePath)
+            ?: throw IllegalArgumentException("Unable to read back card image.")
+        val request = SecureScannerRequest(
+            images = CardScanImages(
+                front = CardScanImage("image/jpeg", base64Image),
+                back = CardScanImage("image/jpeg", android.util.Base64.encodeToString(backImage, android.util.Base64.NO_WRAP))
+            ),
+            category = category,
+            notes = description
+        )
+        val response = NetworkModule.scannerService.analyzeCollectible(
+            FirebaseAuthTokenProvider.authorizationHeader(),
+            request
+        )
+        if (!response.isSuccessful || response.body() == null) {
+            throw IllegalStateException("Secure scan failed: HTTP ${response.code()}.")
+        }
+        val secureScan = SecureScanResultParser.parse(response.body()!!.string())
+        val appraisal = CardAppraisalResult(
+            detectedTitle = secureScan.title.ifBlank { title },
+            detectedName = "",
+            detectedBrand = secureScan.brand,
+            detectedYear = secureScan.year,
+            detectedCardNumber = secureScan.cardNumber,
+            grade = secureScan.grade.ifBlank { "Unverified" },
+            certSerialNumber = secureScan.certSerialNumber,
+            gradingCompany = secureScan.gradingCompany,
+            centeringGrade = 0f,
+            cornersGrade = 0f,
+            edgesGrade = 0f,
+            surfaceGrade = 0f,
+            authenticityScore = 0,
+            estimatedValueUsd = 0.0,
+            marketTrend = "",
+            highlights = secureScan.observations,
+            vaultHashId = "VAULT-${UUID.randomUUID()}",
+            fullAnalysis = secureScan.notices.joinToString(" ").ifBlank {
+                "Identity fields were extracted from authenticated verification providers."
             }
-        } catch (e: Exception) {
-            // 2. Developer Fallback: If backend server is offline, use local Gemini SDK directly
-            android.util.Log.d("VaultRepository", "Backend Scanner offline. Falling back to local Gemini API...")
-            GeminiService.analyzeAndAppraise(
-                context = appContext,
-                title = title,
-                category = category,
-                notes = description,
-                brand = brand,
-                year = year,
-                localImagePath = localImagePath,
-                localBackImagePath = localBackImagePath,
-                verificationEvidence = verification.promptEvidence()
-            )
-        }
+        )
 
         val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
         val finalBrand = if (brand.isNotBlank()) brand else appraisal.detectedBrand
@@ -488,7 +469,9 @@ class VaultRepository(
             cardNumber = appraisal.detectedCardNumber,
             localImagePath = localImagePath,
             localBackImagePath = localBackImagePath,
-            verificationSummary = verification.summary()
+            verificationSummary = listOf(secureScan.verificationSummary, secureScan.notices.joinToString(" "))
+                .filter(String::isNotBlank)
+                .joinToString(" | ")
         )
         val id = db.collectibleDao().insertItem(newItem)
         val savedItem = newItem.copy(id = id)
@@ -587,14 +570,20 @@ class VaultRepository(
         }
     }
 
-    suspend fun createStripePaymentIntent(itemId: Long, amountUsd: Double, buyerName: String): com.example.data.remote.EscrowPaymentResponse {
-        val req = EscrowPaymentRequest(itemId, amountUsd, buyerName)
-        val response = NetworkModule.paymentService.createEscrowPaymentIntent(req)
+    suspend fun createStripePaymentIntent(item: CollectibleItem): com.example.data.remote.EscrowPaymentResponse {
+        if (!item.isListedForSale || item.vaultHashId.isBlank()) {
+            throw IllegalArgumentException("Only a published marketplace listing can be purchased.")
+        }
+        val req = EscrowPaymentRequest("market_${item.vaultHashId}")
+        val response = NetworkModule.paymentService.createEscrowPaymentIntent(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            idempotencyKey = UUID.randomUUID().toString().replace("-", ""),
+            request = req
+        )
         if (response.isSuccessful) {
             return response.body() ?: throw Exception("Empty response from Escrow Server")
         } else {
-            // Real integration will throw 404 or connection exception since the server doesn't exist yet
-            throw Exception("Failed to contact Escrow Server: HTTP ${response.code()}. Backend must be configured.")
+            throw IllegalStateException("Failed to create a secure payment intent: HTTP ${response.code()}.")
         }
     }
 

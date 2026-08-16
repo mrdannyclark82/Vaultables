@@ -13,6 +13,7 @@ data class CardImageQuality(
 )
 
 object CardImageProcessor {
+    private const val MAX_UPLOAD_BYTES = 2_000_000
     fun assessQuality(context: Context, imageUri: Uri): CardImageQuality {
         val bitmap = decodeBitmap(context, imageUri) ?: return CardImageQuality(
             isClear = false,
@@ -65,10 +66,15 @@ object CardImageProcessor {
             bitmap
         }
         return ByteArrayOutputStream().use { output ->
-            uploadBitmap.compress(Bitmap.CompressFormat.JPEG, 92, output)
+            var quality = 92
+            do {
+                output.reset()
+                uploadBitmap.compress(Bitmap.CompressFormat.JPEG, quality, output)
+                quality -= 8
+            } while (output.size() > MAX_UPLOAD_BYTES && quality >= 60)
             if (uploadBitmap !== bitmap) uploadBitmap.recycle()
             bitmap.recycle()
-            output.toByteArray()
+            output.toByteArray().takeIf { it.size <= MAX_UPLOAD_BYTES }
         }
     }
 
