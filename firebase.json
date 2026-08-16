@@ -1,0 +1,42 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "backend",
+      "ignore": [
+        "node_modules",
+        "lib",
+        ".env*",
+        "npm-debug.log"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": [
+    {
+      "target": "api",
+      "rewrites": [
+        {
+          "source": "api/v1/stripe/webhook",
+          "function": {
+            "functionId": "stripeWebhook",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "api/v1/**",
+          "function": {
+            "functionId": "api",
+            "region": "us-central1"
+          }
+        }
+      ]
+    }
+  ]
+}

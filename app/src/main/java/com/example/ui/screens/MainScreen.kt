@@ -331,8 +331,17 @@ fun MainScreen(
                 isScanning = uiState.isScanningInProgress,
                 scanMessage = uiState.scanStatusMessage,
                 onDismiss = { viewModel.setShowAiScanner(false) },
-                onConfirmScan = { title, cat, desc, imgType, brand, year, localImagePath ->
-                    viewModel.scanAndAddCollectible(title, cat, desc, imgType, brand, year, localImagePath)
+                onConfirmScan = { title, cat, desc, imgType, brand, year, localImagePath, localBackImagePath ->
+                    viewModel.scanAndAddCollectible(
+                        title,
+                        cat,
+                        desc,
+                        imgType,
+                        brand,
+                        year,
+                        localImagePath,
+                        localBackImagePath
+                    )
                 }
             )
         }

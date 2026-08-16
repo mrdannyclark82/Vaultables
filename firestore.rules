@@ -1,0 +1,120 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isEscrowParticipant(escrowId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/escrows/$(escrowId)).data.participantIds;
+    }
+
+    function isChatParticipant(chatId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId);
+      allow create: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['displayName', 'photoUrl', 'createdAt', 'updatedAt']);
+      allow update: if isSelf(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoUrl', 'updatedAt']);
+      allow delete: if false;
+
+      match /collections/{collectionId} {
+        allow read, write: if isSelf(userId);
+      }
+
+      match /items/{itemId} {
+        allow read, write: if isSelf(userId);
+      }
+
+      // Payout configuration is provisioned by trusted server code only.
+      match /private/{documentId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /marketplaceListings/{listingId} {
+      allow get, list: if resource.data.visibility == 'public'
+        && resource.data.status == 'active';
+
+      allow create: if signedIn()
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.visibility == 'public'
+        && request.resource.data.status == 'active'
+        && request.resource.data.priceMinor is int
+        && request.resource.data.priceMinor > 0
+        && request.resource.data.currency is string
+        && request.resource.data.currency.size() == 3;
+
+      // Sellers may edit listing presentation and price while active, but cannot
+      // reserve, sell, or change ownership through a client write.
+      allow update: if signedIn()
+        && resource.data.sellerId == request.auth.uid
+        && resource.data.status == 'active'
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.status == 'active'
+        && request.resource.data.visibility == resource.data.visibility
+        && request.resource.data.priceMinor is int
+        && request.resource.data.priceMinor > 0
+        && request.resource.data.currency is string
+        && request.resource.data.currency.size() == 3;
+      allow delete: if signedIn() && resource.data.sellerId == request.auth.uid;
+    }
+
+    match /escrows/{escrowId} {
+      allow read: if isEscrowParticipant(escrowId);
+      // Escrow state, confirmations, payment identifiers, release fields, and
+      // disputes are written only by Functions using the Admin SDK.
+      allow create, update, delete: if false;
+
+      match /disputes/{disputeId} {
+        allow read: if isEscrowParticipant(escrowId);
+        allow write: if false;
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if isChatParticipant(chatId);
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.participantIds
+        && request.resource.data.participantIds.size() >= 2;
+      allow update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isChatParticipant(chatId);
+        allow create: if isChatParticipant(chatId)
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['senderId', 'body', 'createdAt']);
+        allow update, delete: if false;
+      }
+    }
+
+    // Payment attempts and webhook-event receipts are server-only. These
+    // documents are deliberately not exposed to the mobile client.
+    match /paymentAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    match /stripeEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /listingPaymentLocks/{listingId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

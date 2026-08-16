@@ -1,0 +1,26 @@
+{
+  "name": "vaultables-firebase-functions",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Secure Firebase Functions backend for Vaultables",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test lib/**/*.test.js",
+    "serve": "npm run build && firebase emulators:start --only functions,firestore"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.2.0",
+    "stripe": "^17.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2"
+  }
+}

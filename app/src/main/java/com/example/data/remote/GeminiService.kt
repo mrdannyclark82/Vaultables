@@ -10,16 +10,16 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import android.graphics.BitmapFactory
+import android.content.Context
 import android.util.Base64
-import java.io.File
-import android.net.Uri
 
 data class AiAppraisalResult(
     val detectedTitle: String = "",
     val detectedName: String = "",
+    val detectedTeam: String = "",
     val detectedBrand: String = "",
     val detectedYear: String = "",
+    val detectedCardNumber: String = "",
     val grade: String,
     val certSerialNumber: String,
     val gradingCompany: String,
@@ -36,7 +36,7 @@ data class AiAppraisalResult(
 )
 
 object GeminiService {
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -45,37 +45,53 @@ object GeminiService {
         .build()
 
     suspend fun analyzeAndAppraise(
+        context: Context,
         title: String,
         category: String,
         notes: String,
-        localImagePath: String? = null
+        brand: String = "",
+        year: String = "",
+        localImagePath: String? = null,
+        localBackImagePath: String? = null,
+        verificationEvidence: String = ""
     ): AiAppraisalResult = withContext(Dispatchers.IO) {
         val apiKey = BuildConfig.GEMINI_API_KEY
+        android.util.Log.d("GeminiService", "analyzeAndAppraise called for item: $title, category: $category, brand: $brand, year: $year")
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            android.util.Log.d("GeminiService", "Empty or placeholder key, returning fallback")
             return@withContext fallbackAppraisal(title, category)
         }
 
         val promptText = """
             You are Vaultables AI, an expert collectible authenticator, optical entity recognition identifier, PSA/BGS grading specialist, and market appraiser.
-            Act as a fusion engine that has been trained on Hugging Face (GotThatData/sports-cards), Roboflow Universe instance segmentation datasets for bounding box extraction, Junk Wax Hero for vintage baseball, and queries the CardSight REST API for real-time market valuations.
             Analyze and identify the following collectible item from input scan/text:
             Title: $title
             Category: $category
             User Notes/Condition: $notes
+            User-provided Brand Hint: $brand
+            User-provided Year Hint: $year
 
-            Perform Intelligent Entity Identification to recognize:
-            1. Player/Subject Name (e.g., "Michael Jordan", "Charizard", "Daytona Chronograph", "Air Jordan 1")
-            2. Brand / Publisher / Manufacturer (e.g., "Fleer", "Topps", "Panini", "Upper Deck", "Rolex", "Nike", "Wizards of the Coast", "Hasbro", "Hot Wheels")
-            3. Release Year (e.g., "1986", "1999", "1971", "2003", "2020")
-            4. Formatted Professional Title (e.g. "1986 Fleer Michael Jordan #57 Rookie Card")
+            CRITICAL DIRECTIVES FOR ENTITY EXTRACTION:
+            1. Player/Subject Name: Thoroughly inspect the card image for the printed player or subject name. Do not assume or guess a popular player (like Michael Jordan) unless it is explicitly visible and printed on the card or stated in the title.
+            2. Brand / Manufacturer: Identify the brand (e.g., Topps, Fleer, Upper Deck, Panini, Wizards of the Coast, Rolex, Nike). If a brand hint is provided, prioritize it unless it contradicts the image.
+            3. Release Year (Extremely Important): Focus heavily on finding the correct release or print year.
+               - Look for copyright notices (e.g., "© 1995", "© 1999") or year ranges (e.g., "1995-96") on both the front and back of the item if visible in the image.
+               - If a specific year is mentioned in the Title or User-provided Year Hint, use it as grounding unless the image definitively shows a different year.
+               - NEVER hallucinate standard years (like 1986 or 1999) if they do not match the item.
+            4. Card / Edition Details: Identify the card number (e.g., "#57", "#4") and the exact edition/subset. Do NOT assume it is an "All-Star Edition", "Special Edition", or "Refractor" unless those words are explicitly printed on the card. If it is a base card, treat it as a base card.
+            5. The first image is the card front and the second image, when supplied, is the card back. Prioritize names, teams, card number, copyright year, set, and manufacturer printed on the back. Do not invent a value when text is unreadable.
+
+            $verificationEvidence
 
             Respond ONLY with a valid JSON object matching this schema without markdown block formatting:
             {
-              "detectedTitle": "Formatted professional title including year, brand, name, and card/edition",
+              "detectedTitle": "Formatted professional title including year, brand, name, card number, and subset/edition",
               "detectedName": "Player, character, model, or subject name",
+              "detectedTeam": "Team, franchise, or country printed on the card; empty when absent",
               "detectedBrand": "Manufacturer or publisher brand name",
               "detectedYear": "4-digit release year",
-              "grade": "e.g. PSA 10 Gem Mint or BGS 9.5",
+              "detectedCardNumber": "Printed card number without an invented value",
+              "grade": "e.g. PSA 10 Gem Mint, BGS 9.5 Mint, or Raw Near Mint",
               "authenticityScore": integer between 85 and 99,
               "estimatedValueUsd": estimated market price float,
               "marketTrend": "e.g. +8.5% 30d",
@@ -85,17 +101,12 @@ object GeminiService {
         """.trimIndent()
 
         try {
-            var base64Image: String? = null
-            if (localImagePath != null) {
-                try {
-                    val uri = Uri.parse(localImagePath)
-                    val file = File(uri.path!!)
-                    val bytes = file.readBytes()
-                    base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                } catch (e: Exception) {
-                    android.util.Log.e("GeminiService", "Failed to encode image", e)
-                }
-            }
+            val base64FrontImage = localImagePath
+                ?.let { CardImageProcessor.prepareForUpload(context, it) }
+                ?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
+            val base64BackImage = localBackImagePath
+                ?.let { CardImageProcessor.prepareForUpload(context, it) }
+                ?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
 
             val jsonBody = JSONObject().apply {
                 put("contents", JSONArray().apply {
@@ -104,16 +115,27 @@ object GeminiService {
                             put(JSONObject().apply {
                                 put("text", promptText)
                             })
-                            if (base64Image != null) {
+                            if (base64FrontImage != null) {
                                 put(JSONObject().apply {
                                     put("inlineData", JSONObject().apply {
                                         put("mimeType", "image/jpeg")
-                                        put("data", base64Image)
+                                        put("data", base64FrontImage)
+                                    })
+                                })
+                            }
+                            if (base64BackImage != null) {
+                                put(JSONObject().apply {
+                                    put("inlineData", JSONObject().apply {
+                                        put("mimeType", "image/jpeg")
+                                        put("data", base64BackImage)
                                     })
                                 })
                             }
                         })
                     })
+                })
+                put("generationConfig", JSONObject().apply {
+                    put("responseMimeType", "application/json")
                 })
             }
 
@@ -124,11 +146,14 @@ object GeminiService {
 
             val response = client.newCall(request).execute()
             val responseString = response.body?.string() ?: ""
+            android.util.Log.d("GeminiService", "Response code: ${response.code}, body length: ${responseString.length}")
 
             if (!response.isSuccessful || responseString.isEmpty()) {
+                android.util.Log.e("GeminiService", "API request failed with code ${response.code} and body: $responseString")
                 return@withContext fallbackAppraisal(title, category)
             }
 
+            android.util.Log.d("GeminiService", "API request successful. Response: $responseString")
             val responseJson = JSONObject(responseString)
             val textOutput = responseJson
                 .optJSONArray("candidates")
@@ -143,8 +168,10 @@ object GeminiService {
 
             val parsedTitle = parsed.optString("detectedTitle", title)
             val parsedName = parsed.optString("detectedName", extractEntityName(title))
+            val parsedTeam = parsed.optString("detectedTeam")
             val parsedBrand = parsed.optString("detectedBrand", extractEntityBrand(title, category))
             val parsedYear = parsed.optString("detectedYear", extractEntityYear(title))
+            val parsedCardNumber = parsed.optString("detectedCardNumber")
             val grade = parsed.optString("grade", "9.6 Near Mint+")
             val authScore = parsed.optInt("authenticityScore", 98)
             val valUsd = parsed.optDouble("estimatedValueUsd", defaultPriceFor(category))
@@ -179,8 +206,10 @@ object GeminiService {
             AiAppraisalResult(
                 detectedTitle = if (parsedTitle.isNotBlank()) parsedTitle else title,
                 detectedName = parsedName,
+                detectedTeam = parsedTeam,
                 detectedBrand = parsedBrand,
                 detectedYear = parsedYear,
+                detectedCardNumber = parsedCardNumber,
                 grade = grade,
                 certSerialNumber = certNum,
                 gradingCompany = detectedGradingCompany,
@@ -196,6 +225,7 @@ object GeminiService {
                 fullAnalysis = analysis
             )
         } catch (e: Exception) {
+            android.util.Log.e("GeminiService", "Exception in analyzeAndAppraise", e)
             fallbackAppraisal(title, category)
         }
     }
@@ -229,8 +259,10 @@ object GeminiService {
         return AiAppraisalResult(
             detectedTitle = formattedTitle,
             detectedName = detectedName,
+            detectedTeam = "",
             detectedBrand = detectedBrand,
             detectedYear = detectedYear,
+            detectedCardNumber = "",
             grade = "9.8 Gem Mint",
             certSerialNumber = certNum,
             gradingCompany = detectedGradingCompany,

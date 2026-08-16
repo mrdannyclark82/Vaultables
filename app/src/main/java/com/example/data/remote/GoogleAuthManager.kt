@@ -3,17 +3,22 @@ package com.example.data.remote
 import android.content.Context
 import android.util.Log
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 data class UserAccount(
-    val uid: String = "google-user-10029",
-    val displayName: String = "Danny Clark",
-    val email: String = "mrdannyclark82@gmail.com",
+    val uid: String = "",
+    val displayName: String = "Guest User",
+    val email: String = "",
     val photoUrl: String? = null,
     val isSignedIn: Boolean = true,
     val authProvider: String = "Google OAuth 2.0"
@@ -29,10 +34,10 @@ object GoogleAuthManager {
 
     fun getSavedUserAccount(context: Context): UserAccount {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        val isSignedIn = prefs.getBoolean(KEY_IS_SIGNED_IN, true) // Default signed in with Google
-        val name = prefs.getString(KEY_DISPLAY_NAME, "Danny Clark") ?: "Danny Clark"
-        val email = prefs.getString(KEY_EMAIL, "mrdannyclark82@gmail.com") ?: "mrdannyclark82@gmail.com"
-        val uid = prefs.getString(KEY_UID, "google-oauth-882190") ?: "google-oauth-882190"
+        val isSignedIn = prefs.getBoolean(KEY_IS_SIGNED_IN, false)
+        val name = prefs.getString(KEY_DISPLAY_NAME, "Guest User") ?: "Guest User"
+        val email = prefs.getString(KEY_EMAIL, "") ?: ""
+        val uid = prefs.getString(KEY_UID, "") ?: ""
 
         val firebaseUser = try {
             FirebaseAuth.getInstance().currentUser
@@ -100,16 +105,41 @@ object GoogleAuthManager {
 
         val credentialManager = CredentialManager.create(context)
 
-        // On device/emulator if CredentialManager prompts or fails gracefully, fall back to Google OAuth verified session
-        val fallbackAccount = UserAccount(
-            uid = "google-oauth-mrdannyclark82",
-            displayName = "Danny Clark",
-            email = "mrdannyclark82@gmail.com",
-            photoUrl = null,
-            isSignedIn = true,
-            authProvider = "Google OAuth 2.0"
-        )
-        saveUserAccount(context, fallbackAccount)
-        onSuccess(fallbackAccount)
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val result = credentialManager.getCredential(context, request)
+                val credential = result.credential
+                if (
+                    credential !is CustomCredential ||
+                    credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                ) {
+                    onError("Google did not return an ID credential.")
+                    return@launch
+                }
+                val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                val firebaseCredential = GoogleAuthProvider.getCredential(googleCredential.idToken, null)
+                val firebaseUser = FirebaseAuth.getInstance()
+                    .signInWithCredential(firebaseCredential)
+                    .await()
+                    .user
+                    ?: throw IllegalStateException("Firebase did not return a signed-in user.")
+                val account = UserAccount(
+                    uid = firebaseUser.uid,
+                    displayName = firebaseUser.displayName ?: "Vaultables Collector",
+                    email = firebaseUser.email.orEmpty(),
+                    photoUrl = firebaseUser.photoUrl?.toString(),
+                    isSignedIn = true,
+                    authProvider = "Google OAuth 2.0 (Firebase)"
+                )
+                saveUserAccount(context, account)
+                onSuccess(account)
+            } catch (e: GetCredentialException) {
+                Log.w(TAG, "Google sign-in credential request failed", e)
+                onError("Google sign-in was canceled or unavailable.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Google sign-in failed", e)
+                onError("Unable to sign in with Google.")
+            }
+        }
     }
 }

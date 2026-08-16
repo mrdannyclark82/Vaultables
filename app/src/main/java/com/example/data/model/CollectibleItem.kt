@@ -92,5 +92,9 @@ data class CollectibleItem(
     val imageType: String = "CARD", // "CARD", "WATCH", "COMIC", "SNEAKER", "COIN", "ART", "DIECAST", "CLOTHING", "TRENDING"
     val brandName: String = "", // e.g. "Fleer", "Topps", "Rolex", "Nike"
     val releaseYear: String = "", // e.g. "1986", "1999", "2020"
-    val localImagePath: String? = null // local URI if a photo was taken
+    val teamName: String = "",
+    val cardNumber: String = "",
+    val localImagePath: String? = null, // local URI if a front photo was taken
+    val localBackImagePath: String? = null,
+    val verificationSummary: String = ""
 )

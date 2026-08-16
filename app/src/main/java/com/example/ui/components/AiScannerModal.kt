@@ -38,6 +38,10 @@ import com.example.ui.theme.GoldAccent
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.example.data.remote.CardImageProcessor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +49,7 @@ fun AiScannerModal(
     isScanning: Boolean,
     scanMessage: String,
     onDismiss: () -> Unit,
-    onConfirmScan: (title: String, category: String, desc: String, imageType: String, brand: String, year: String, localImagePath: String?) -> Unit,
+    onConfirmScan: (title: String, category: String, desc: String, imageType: String, brand: String, year: String, localImagePath: String?, localBackImagePath: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var titleInput by remember { mutableStateOf("") }
@@ -53,8 +57,15 @@ fun AiScannerModal(
     var brandInput by remember { mutableStateOf("") }
     var yearInput by remember { mutableStateOf("") }
     var descInput by remember { mutableStateOf("") }
-    var isLiveCameraActive by remember { mutableStateOf(true) }
-    var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var frontImageUri by remember { mutableStateOf<Uri?>(null) }
+    var backImageUri by remember { mutableStateOf<Uri?>(null) }
+    var imageQualityMessage by remember { mutableStateOf<String?>(null) }
+    var isCheckingImage by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val requiresBackImage = selectedCategory == CollectibleCategory.TRADING_CARDS ||
+        selectedCategory == CollectibleCategory.POKEMON_CARDS
+    val isCaptureComplete = frontImageUri != null && (!requiresBackImage || backImageUri != null)
 
     val infiniteTransition = rememberInfiniteTransition(label = "scanner")
     val laserY by infiniteTransition.animateFloat(
@@ -92,20 +103,34 @@ fun AiScannerModal(
                     .verticalScroll(rememberScrollState())
             ) {
                 if (isScanning) {
-                    // Scanning Animation View
+                    // Scanning Animation View (maintains captured photo for grounding & visual feedback)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(220.dp)
+                            .height(300.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color.Black)
                             .border(1.dp, GoldAccent, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
+                        if (frontImageUri != null) {
+                            AsyncImage(
+                                model = frontImageUri,
+                                contentDescription = "Captured Card Front",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f))
+                            )
+                        }
+
                         // Scanner Viewport Box
                         Box(
                             modifier = Modifier
-                                .size(160.dp, 160.dp)
+                                .size(220.dp, 220.dp)
                                 .border(1.5.dp, GoldAccent.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                         )
 
@@ -144,7 +169,7 @@ fun AiScannerModal(
                     }
                 } else {
                     Text(
-                        text = "Point camera at item or input details. Gemini AI will inspect texture, alignment, and fetch cloud valuation.",
+                        text = "Capture a clear card front, then its back. The back is used to verify printed names, teams, card numbers, copyright years, and set details.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -161,37 +186,34 @@ fun AiScannerModal(
                             .border(1.dp, GoldAccent.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isLiveCameraActive) {
-                            if (capturedImageUri != null) {
-                                AsyncImage(model = capturedImageUri, contentDescription = "Captured Image", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-                            } else {
+                        if (!isCaptureComplete) {
                                 CameraScanPreviewView(
-                                    onImageCaptured = { 
-                                        capturedImageUri = it 
-                                        val finalTitle = titleInput.ifBlank { "${selectedCategory.displayName} Collectible" }
-                                        onConfirmScan(
-                                            finalTitle,
-                                            selectedCategory.displayName,
-                                            descInput.ifBlank { "Scanned via Live Camera & Gemini AI Optical Identifier" },
-                                            selectedCategory.name,
-                                            brandInput,
-                                            yearInput,
-                                            it?.toString()
-                                        )
-                                    },
-                                    onSimulateScan = {
-                                        // No-op, now handled in onImageCaptured
+                                    captureLabel = if (frontImageUri == null) "Capture Clear Front" else "Capture Clear Back",
+                                    onImageCaptured = { uri ->
+                                        if (uri != null) {
+                                            isCheckingImage = true
+                                            imageQualityMessage = null
+                                            scope.launch(Dispatchers.Default) {
+                                                val quality = CardImageProcessor.assessQuality(context, uri)
+                                                withContext(Dispatchers.Main) {
+                                                    isCheckingImage = false
+                                                    if (quality.isClear) {
+                                                        if (frontImageUri == null) frontImageUri = uri else backImageUri = uri
+                                                    } else {
+                                                        imageQualityMessage = quality.issues.joinToString(" ")
+                                                    }
+                                                }
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.fillMaxSize()
                                 )
-                            }
                         } else {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Camera placeholder",
-                                tint = GoldAccent.copy(alpha = 0.5f),
-                                modifier = Modifier.size(48.dp)
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.CheckCircle, "Card images captured", tint = EmeraldVerified, modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Clear front and back captured", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         // Scanning Reticle Overlay
@@ -238,6 +260,27 @@ fun AiScannerModal(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    if (isCheckingImage) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = GoldAccent)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    imageQualityMessage?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    Text(
+                        text = buildString {
+                            append("Front: ")
+                            append(if (frontImageUri == null) "needed" else "captured")
+                            if (requiresBackImage) {
+                                append("  •  Back: ")
+                                append(if (backImageUri == null) "needed" else "captured")
+                            }
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
 
                     Surface(
                         color = GoldAccent.copy(alpha = 0.12f),
@@ -364,10 +407,12 @@ fun AiScannerModal(
                             selectedCategory.name,
                             brandInput,
                             yearInput,
-                            capturedImageUri?.toString()
+                            frontImageUri?.toString(),
+                            backImageUri?.toString()
                         )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
+                    enabled = isCaptureComplete && !isCheckingImage,
                     modifier = Modifier.testTag("start_ai_scan_button")
                 ) {
                     Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Scan", tint = Color.Black)
@@ -389,8 +434,8 @@ fun AiScannerModal(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun CameraScanPreviewView(
+    captureLabel: String,
     onImageCaptured: (Uri?) -> Unit,
-    onSimulateScan: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -442,13 +487,11 @@ fun CameraScanPreviewView(
                         ContextCompat.getMainExecutor(context),
                         object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(outputFileResults: androidx.camera.core.ImageCapture.OutputFileResults) {
-                                val savedUri = android.net.Uri.fromFile(file)
-                                onImageCaptured(savedUri)
-                                onSimulateScan()
+                                onImageCaptured(android.net.Uri.fromFile(file))
                             }
+
                             override fun onError(exception: androidx.camera.core.ImageCaptureException) {
                                 Log.e("CameraScanPreview", "Photo capture failed", exception)
-                                onSimulateScan()
                             }
                         }
                     )
@@ -460,7 +503,7 @@ fun CameraScanPreviewView(
             ) {
                 Icon(imageVector = Icons.Default.Camera, contentDescription = "Capture", tint = Color.Black)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Capture & Analyze", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text(captureLabel, color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
     } else {

@@ -44,7 +44,7 @@ data class VaultUiState(
 class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
-    val repository = VaultRepository(db)
+    val repository = VaultRepository(db, application.applicationContext)
 
     private val _uiState = MutableStateFlow(VaultUiState())
     val uiState: StateFlow<VaultUiState> = _uiState.asStateFlow()
@@ -173,7 +173,8 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         imageType: String,
         brand: String = "",
         year: String = "",
-        localImagePath: String? = null
+        localImagePath: String? = null,
+        localBackImagePath: String? = null
     ) {
         viewModelScope.launch {
             _uiState.update {
@@ -188,7 +189,16 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing & grading ledger...") }
             kotlinx.coroutines.delay(800)
 
-            val added = repository.addNewCollectible(title, category, description, imageType, brand, year, localImagePath)
+            val added = repository.addNewCollectible(
+                title,
+                category,
+                description,
+                imageType,
+                brand,
+                year,
+                localImagePath,
+                localBackImagePath
+            )
 
             _uiState.update {
                 it.copy(
@@ -204,19 +214,15 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     fun createEscrowTrade(item: CollectibleItem, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
             try {
-                // Try to hit the real Vaultables backend to get a PaymentIntent for Stripe
                 val response = repository.createStripePaymentIntent(item.id, item.estimatedValueUsd, buyerName)
                 _uiState.update { it.copy(paymentClientSecret = response.clientSecret, paymentError = null, showEscrowDialog = false) }
             } catch (e: Exception) {
-                // If the backend is offline, enter Sandbox Mode for local testing.
-                _uiState.update { it.copy(
-                    scanStatusMessage = "Backend offline. Entering Vault Sandbox Mode...",
-                    isScanningInProgress = true, // Reuse scanning indicator for sandbox message
-                    showEscrowDialog = false
-                ) }
-                kotlinx.coroutines.delay(2000) // Simulate processing
-                _uiState.update { it.copy(isScanningInProgress = false) }
-                onPaymentSheetResult(true, item, buyerName, feePercentage)
+                _uiState.update {
+                    it.copy(
+                        paymentError = "Unable to start the secure payment. No escrow was created.",
+                        showEscrowDialog = false
+                    )
+                }
             }
         }
     }

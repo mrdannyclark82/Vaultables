@@ -180,7 +180,7 @@ fun ItemDetailScreen(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            if (item.brandName.isNotBlank() || item.releaseYear.isNotBlank()) {
+            if (item.brandName.isNotBlank() || item.releaseYear.isNotBlank() || item.teamName.isNotBlank() || item.cardNumber.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (item.releaseYear.isNotBlank()) {
@@ -208,6 +208,49 @@ fun ItemDetailScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (item.teamName.isNotBlank() || item.cardNumber.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = listOfNotNull(
+                        item.teamName.takeIf { it.isNotBlank() }?.let { "Team: $it" },
+                        item.cardNumber.takeIf { it.isNotBlank() }?.let { "Card #: $it" }
+                    ).joinToString("  •  "),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = EmeraldVerified
+                )
+            }
+
+            if (item.verificationSummary.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    color = EmeraldVerified.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FactCheck,
+                            contentDescription = "Catalog evidence",
+                            tint = EmeraldVerified,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Catalog evidence", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                item.verificationSummary,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

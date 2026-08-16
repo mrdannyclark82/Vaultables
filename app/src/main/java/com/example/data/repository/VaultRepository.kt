@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.content.Context
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.remote.FirestoreSyncManager
@@ -12,7 +13,10 @@ import kotlinx.coroutines.flow.first
 import android.util.Base64
 import java.nio.charset.StandardCharsets
 
-class VaultRepository(private val db: AppDatabase) {
+class VaultRepository(
+    private val db: AppDatabase,
+    private val appContext: Context
+) {
 
     val allItems: Flow<List<CollectibleItem>> = db.collectibleDao().getAllItems()
     val marketplaceListings: Flow<List<CollectibleItem>> = db.collectibleDao().getMarketplaceListings()
@@ -370,21 +374,48 @@ class VaultRepository(private val db: AppDatabase) {
         imageType: String,
         brand: String = "",
         year: String = "",
-        localImagePath: String? = null
+        localImagePath: String? = null,
+        localBackImagePath: String? = null
     ): CollectibleItem {
         var base64Image = ""
         if (localImagePath != null) {
             try {
-                val uri = android.net.Uri.parse(localImagePath)
-                val file = java.io.File(uri.path!!)
-                val bytes = file.readBytes()
+                val bytes = com.example.data.remote.CardImageProcessor.prepareForUpload(appContext, localImagePath)
+                    ?: throw IllegalArgumentException("Unable to read front card image")
                 base64Image = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
             } catch (e: Exception) {
                 android.util.Log.e("VaultRepository", "Failed to encode image for backend scanner", e)
             }
         }
 
-        val appraisal: AiAppraisalResult = try {
+        val isTradingCard = category == CollectibleCategory.TRADING_CARDS.displayName ||
+            category == CollectibleCategory.POKEMON_CARDS.displayName
+        val verification = if (isTradingCard && localImagePath != null) {
+            com.example.data.remote.CardVerificationService.verify(
+                context = appContext,
+                frontImageUri = localImagePath,
+                backImageUri = localBackImagePath,
+                titleHint = title,
+                brandHint = brand,
+                yearHint = year
+            )
+        } else {
+            com.example.data.remote.CardVerificationResult(emptyList(), emptyList())
+        }
+
+        val appraisal: AiAppraisalResult = if (isTradingCard && localImagePath != null) {
+            GeminiService.analyzeAndAppraise(
+                context = appContext,
+                title = title,
+                category = category,
+                notes = description,
+                brand = brand,
+                year = year,
+                localImagePath = localImagePath,
+                localBackImagePath = localBackImagePath,
+                verificationEvidence = verification.promptEvidence()
+            )
+        } else try {
             // 1. Attempt to hit the launch-ready backend Scanner Service
             val request = com.example.data.remote.ScannerRequest(base64Image, category, description)
             val response = NetworkModule.scannerService.analyzeCollectible(request)
@@ -415,7 +446,17 @@ class VaultRepository(private val db: AppDatabase) {
         } catch (e: Exception) {
             // 2. Developer Fallback: If backend server is offline, use local Gemini SDK directly
             android.util.Log.d("VaultRepository", "Backend Scanner offline. Falling back to local Gemini API...")
-            GeminiService.analyzeAndAppraise(title, category, description, localImagePath)
+            GeminiService.analyzeAndAppraise(
+                context = appContext,
+                title = title,
+                category = category,
+                notes = description,
+                brand = brand,
+                year = year,
+                localImagePath = localImagePath,
+                localBackImagePath = localBackImagePath,
+                verificationEvidence = verification.promptEvidence()
+            )
         }
 
         val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
@@ -443,7 +484,11 @@ class VaultRepository(private val db: AppDatabase) {
             imageType = imageType,
             brandName = finalBrand,
             releaseYear = finalYear,
-            localImagePath = localImagePath
+            teamName = appraisal.detectedTeam,
+            cardNumber = appraisal.detectedCardNumber,
+            localImagePath = localImagePath,
+            localBackImagePath = localBackImagePath,
+            verificationSummary = verification.summary()
         )
         val id = db.collectibleDao().insertItem(newItem)
         val savedItem = newItem.copy(id = id)
