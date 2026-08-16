@@ -57,7 +57,7 @@ fun EscrowTradeDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Your funds will be held securely by a third-party escrow contract until the item is received and cryptographically verified via the Vaultables NFC seal.",
+                    text = "Escrow is not live. No card will be charged. This screen is a preview of the future checkout flow.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

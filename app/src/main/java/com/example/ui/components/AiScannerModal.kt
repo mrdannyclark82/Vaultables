@@ -102,6 +102,14 @@ fun AiScannerModal(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                if (!isScanning && scanMessage.isNotBlank()) {
+                    Text(
+                        text = scanMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
                 if (isScanning) {
                     // Scanning Animation View (maintains captured photo for grounding & visual feedback)
                     Box(

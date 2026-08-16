@@ -1,39 +1,37 @@
 package com.example.data.remote
 
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkModule {
-    // Hosting rewrite is live on the default site until api.vaultables.com DNS exists.
-    private const val ESCROW_API_BASE_URL = "https://vaultables.web.app/"
+    // Direct Cloud Run URL — Hosting rewrites drop or time out large scan POSTs.
+    private const val ESCROW_API_BASE_URL = "https://api-ttc3syrleq-uc.a.run.app/"
+
+    private val moshi: Moshi = Moshi.Builder()
+        .addLast(KotlinJsonAdapterFactory())
+        .build()
+
+    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(90, TimeUnit.SECONDS)
+        .build()
+
+    private val retrofit: Retrofit = Retrofit.Builder()
+        .baseUrl(ESCROW_API_BASE_URL)
+        .client(httpClient)
+        .addConverterFactory(MoshiConverterFactory.create(moshi))
+        .build()
 
     val paymentService: PaymentService by lazy {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-
-        Retrofit.Builder()
-            .baseUrl(ESCROW_API_BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create())
-            .build()
-            .create(PaymentService::class.java)
+        retrofit.create(PaymentService::class.java)
     }
 
     val scannerService: ScannerService by lazy {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        Retrofit.Builder()
-            .baseUrl(ESCROW_API_BASE_URL)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create())
-            .build()
-            .create(ScannerService::class.java)
+        retrofit.create(ScannerService::class.java)
     }
 }

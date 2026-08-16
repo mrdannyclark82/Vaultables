@@ -213,8 +213,8 @@ fun MainScreen(
                         NavigationBarItem(
                             selected = uiState.activeTab == 3,
                             onClick = { viewModel.setActiveTab(3) },
-                            icon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "E2EE Chat") },
-                            label = { Text("E2EE Chat") },
+                            icon = { Icon(imageVector = Icons.Default.Lock, contentDescription = "Messages") },
+                            label = { Text("Messages") },
                             modifier = Modifier.testTag("nav_tab_chat")
                         )
                         NavigationBarItem(
@@ -343,6 +343,15 @@ fun MainScreen(
                         localBackImagePath
                     )
                 }
+            )
+        }
+
+        val pendingScan = uiState.pendingScan
+        if (uiState.showScanReview && pendingScan != null) {
+            ScanReviewDialog(
+                draft = pendingScan,
+                onDismiss = { viewModel.dismissScanReview() },
+                onSave = { title, brand, year -> viewModel.confirmScanSave(title, brand, year) }
             )
         }
 

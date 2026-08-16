@@ -57,13 +57,13 @@ fun EncryptedChatScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Lock,
-                        contentDescription = "E2EE",
+                        contentDescription = "On-device messages",
                         tint = PurpleE2EE,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "🔒 256-Bit E2EE Private Channel Active",
+                        text = "On-device messages — not end-to-end encrypted",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = PurpleE2EE

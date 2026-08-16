@@ -164,9 +164,9 @@ fun MyVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "+8.4% past 30 days • ${items.size} Verified Vaultables Items",
+                            text = "${items.size} item${if (items.size == 1) "" else "s"} in your vault",
                             fontSize = 12.sp,
-                            color = EmeraldVerified,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
                         )
                     }

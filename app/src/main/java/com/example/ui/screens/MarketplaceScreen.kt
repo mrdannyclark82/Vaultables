@@ -89,7 +89,7 @@ fun MarketplaceScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "100% Vaultables AI Verified • 2.5% Escrow Protection",
+                        text = "Beta catalog • Payments and escrow are not live",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 import com.example.data.remote.GoogleAuthManager
+import com.example.data.remote.ScanDraft
 import com.example.data.remote.UserAccount
 
 import com.example.ui.components.ReferralItem
@@ -37,6 +38,8 @@ data class VaultUiState(
     val showActivityReportDialog: Boolean = false,
     val isScanningInProgress: Boolean = false,
     val scanStatusMessage: String = "",
+    val pendingScan: ScanDraft? = null,
+    val showScanReview: Boolean = false,
     val paymentClientSecret: String? = null,
     val paymentError: String? = null
 )
@@ -180,17 +183,12 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     isScanningInProgress = true,
-                    scanStatusMessage = "Performing optical entity recognition & neural identification..."
+                    scanStatusMessage = "Uploading front and back to the vault API…"
                 )
             }
-            kotlinx.coroutines.delay(1000)
-            _uiState.update { it.copy(scanStatusMessage = "Extracting player name, manufacturer brand & release year...") }
-            kotlinx.coroutines.delay(1000)
-            _uiState.update { it.copy(scanStatusMessage = "Consulting Gemini AI market pricing & grading ledger...") }
-            kotlinx.coroutines.delay(800)
 
             try {
-                val added = repository.addNewCollectible(
+                val draft = repository.analyzeCollectible(
                     title,
                     category,
                     description,
@@ -205,17 +203,44 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         isScanningInProgress = false,
                         showAiScannerDialog = false,
-                        showAddCustomItemDialog = false,
-                        selectedItemForDetail = added
+                        pendingScan = draft,
+                        showScanReview = true,
+                        scanStatusMessage = ""
                     )
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isScanningInProgress = false,
-                        scanStatusMessage = e.message ?: "Secure card scan failed. Please try again."
+                        scanStatusMessage = e.message
+                            ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                            ?: "Secure card scan failed. Please try again."
                     )
                 }
+            }
+        }
+    }
+
+    fun dismissScanReview() {
+        _uiState.update { it.copy(showScanReview = false, pendingScan = null) }
+    }
+
+    fun confirmScanSave(title: String, brand: String, year: String) {
+        val draft = _uiState.value.pendingScan ?: return
+        viewModelScope.launch {
+            val saved = repository.saveScannedCollectible(
+                draft.copy(
+                    title = title.ifBlank { draft.title },
+                    brand = brand,
+                    year = year
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    showScanReview = false,
+                    pendingScan = null,
+                    selectedItemForDetail = saved
+                )
             }
         }
     }

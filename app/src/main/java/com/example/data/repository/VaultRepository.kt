@@ -9,7 +9,7 @@ import com.example.data.remote.CardScanImages
 import com.example.data.remote.FirebaseAuthTokenProvider
 import com.example.data.remote.NetworkModule
 import com.example.data.remote.EscrowPaymentRequest
-import com.example.data.remote.CardAppraisalResult
+import com.example.data.remote.ScanDraft
 import com.example.data.remote.SecureScannerRequest
 import com.example.data.remote.SecureScanResultParser
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +31,11 @@ class VaultRepository(
     val allReviews: Flow<List<UserReview>> = db.userReviewDao().getAllReviews()
 
     suspend fun seedInitialDataIfEmpty() {
+        // Sideload ship: do not invent a marketplace. Existing installs keep their Room data.
+    }
+
+    @Suppress("unused")
+    private suspend fun seedDemoCatalogUnused() {
         val currentItems = db.collectibleDao().getAllItems().first()
         if (currentItems.isEmpty()) {
             val sampleItems = listOf(
@@ -372,7 +377,7 @@ class VaultRepository(
         }
     }
 
-    suspend fun addNewCollectible(
+    suspend fun analyzeCollectible(
         title: String,
         category: String,
         description: String,
@@ -381,7 +386,7 @@ class VaultRepository(
         year: String = "",
         localImagePath: String? = null,
         localBackImagePath: String? = null
-    ): CollectibleItem {
+    ): ScanDraft {
         var base64Image = ""
         if (localImagePath != null) {
             try {
@@ -413,65 +418,74 @@ class VaultRepository(
             FirebaseAuthTokenProvider.authorizationHeader(),
             request
         )
-        if (!response.isSuccessful || response.body() == null) {
-            throw IllegalStateException("Secure scan failed: HTTP ${response.code()}.")
+        val rawBody = response.body()?.string().orEmpty()
+        if (!response.isSuccessful) {
+            android.util.Log.e("VaultRepository", "Scan HTTP ${response.code()}: $rawBody")
+            val serverMessage = rawBody
+                .ifBlank { response.errorBody()?.string().orEmpty() }
+                .let { body ->
+                    runCatching { org.json.JSONObject(body).optJSONObject("error")?.optString("message") }
+                        .getOrNull()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "HTTP ${response.code()}"
+                }
+            throw IllegalStateException("Secure scan failed: $serverMessage")
         }
-        val secureScan = SecureScanResultParser.parse(response.body()!!.string())
-        val appraisal = CardAppraisalResult(
-            detectedTitle = secureScan.title.ifBlank { title },
-            detectedName = "",
-            detectedBrand = secureScan.brand,
-            detectedYear = secureScan.year,
-            detectedCardNumber = secureScan.cardNumber,
-            grade = secureScan.grade.ifBlank { "Unverified" },
-            certSerialNumber = secureScan.certSerialNumber,
+        val secureScan = try {
+            SecureScanResultParser.parse(rawBody)
+        } catch (e: Exception) {
+            android.util.Log.e("VaultRepository", "Scan parse failed: $rawBody", e)
+            throw IllegalStateException("Scan returned unreadable data. ${e.message}")
+        }
+        return ScanDraft(
+            title = secureScan.title.ifBlank { title },
+            category = category,
+            description = description,
+            imageType = imageType,
+            brand = brand.ifBlank { secureScan.brand },
+            year = year.ifBlank { secureScan.year },
+            cardNumber = secureScan.cardNumber,
+            grade = secureScan.grade.ifBlank { "Unverified — visual extract only" },
             gradingCompany = secureScan.gradingCompany,
+            certSerialNumber = secureScan.certSerialNumber,
+            localImagePath = localImagePath,
+            localBackImagePath = localBackImagePath,
+            verificationSummary = listOf(secureScan.verificationSummary, secureScan.notices.joinToString(" "))
+                .filter(String::isNotBlank)
+                .joinToString(" | "),
+            notices = secureScan.notices,
+            observations = secureScan.observations
+        )
+    }
+
+    suspend fun saveScannedCollectible(draft: ScanDraft): CollectibleItem {
+        val newItem = CollectibleItem(
+            title = draft.title.ifBlank { "Untitled scan" },
+            category = draft.category,
+            description = draft.description,
+            ownerName = "Vault Collector",
+            ownerRating = 0f,
+            estimatedValueUsd = 0.0,
+            conditionGrade = draft.grade,
+            certSerialNumber = draft.certSerialNumber,
+            gradingCompany = draft.gradingCompany,
             centeringGrade = 0f,
             cornersGrade = 0f,
             edgesGrade = 0f,
             surfaceGrade = 0f,
             authenticityScore = 0,
-            estimatedValueUsd = 0.0,
-            marketTrend = "",
-            highlights = secureScan.observations,
+            isVerified = false,
             vaultHashId = "VAULT-${UUID.randomUUID()}",
-            fullAnalysis = secureScan.notices.joinToString(" ").ifBlank {
-                "Identity fields were extracted from authenticated verification providers."
-            }
-        )
-
-        val finalTitle = if (appraisal.detectedTitle.isNotBlank()) appraisal.detectedTitle else title
-        val finalBrand = if (brand.isNotBlank()) brand else appraisal.detectedBrand
-        val finalYear = if (year.isNotBlank()) year else appraisal.detectedYear
-
-        val newItem = CollectibleItem(
-            title = finalTitle,
-            category = category,
-            description = description,
-            ownerName = "Vault Collector",
-            ownerRating = 4.9f,
-            estimatedValueUsd = appraisal.estimatedValueUsd,
-            conditionGrade = appraisal.grade,
-            certSerialNumber = appraisal.certSerialNumber,
-            gradingCompany = appraisal.gradingCompany,
-            centeringGrade = appraisal.centeringGrade,
-            cornersGrade = appraisal.cornersGrade,
-            edgesGrade = appraisal.edgesGrade,
-            surfaceGrade = appraisal.surfaceGrade,
-            authenticityScore = appraisal.authenticityScore,
-            vaultHashId = appraisal.vaultHashId,
             isListedForSale = false,
-            salePriceUsd = appraisal.estimatedValueUsd,
-            imageType = imageType,
-            brandName = finalBrand,
-            releaseYear = finalYear,
-            teamName = appraisal.detectedTeam,
-            cardNumber = appraisal.detectedCardNumber,
-            localImagePath = localImagePath,
-            localBackImagePath = localBackImagePath,
-            verificationSummary = listOf(secureScan.verificationSummary, secureScan.notices.joinToString(" "))
-                .filter(String::isNotBlank)
-                .joinToString(" | ")
+            salePriceUsd = 0.0,
+            imageType = draft.imageType,
+            brandName = draft.brand,
+            releaseYear = draft.year,
+            teamName = "",
+            cardNumber = draft.cardNumber,
+            localImagePath = draft.localImagePath,
+            localBackImagePath = draft.localBackImagePath,
+            verificationSummary = draft.verificationSummary
         )
         val id = db.collectibleDao().insertItem(newItem)
         val savedItem = newItem.copy(id = id)
@@ -591,7 +605,7 @@ class VaultRepository(
         val totalVal = items.sumOf { it.estimatedValueUsd }
         val sb = StringBuilder()
         sb.append("VAULT COLLECTIBLES - OFFICIAL INVENTORY & TRADE REPORT\n")
-        sb.append("Generated Date: 2026-07-22 | Status: Cryptographically Verified\n")
+        sb.append("Generated locally. Not a certified appraisal or encrypted ledger.\n")
         sb.append("============================================================\n\n")
         sb.append(String.format("TOTAL PORTFOLIO VALUE: $%.2f USD\n", totalVal))
         sb.append("TOTAL CATALOGED ITEMS: ${items.size}\n")
@@ -605,7 +619,7 @@ class VaultRepository(
             sb.append(String.format("   - Market Appraisal: $%.2f USD\n\n", item.estimatedValueUsd))
         }
         sb.append("============================================================\n")
-        sb.append("E2EE Encrypted Ledger Signature: 0x8F2A9C91B412E83F001\n")
+        sb.append("End of local inventory export.\n")
         return sb.toString()
     }
 
