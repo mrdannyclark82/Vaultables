@@ -3,7 +3,6 @@ import { logger } from "firebase-functions";
 import {
   CARDSIGHT_API_KEY,
   CARDSIGHT_API_URL,
-  GEMINI_API_KEY,
   GOOGLE_CUSTOM_SEARCH_API_KEY,
   GOOGLE_CUSTOM_SEARCH_CX,
 } from "./config.js";
@@ -173,12 +172,21 @@ function secretValue(value: { value: () => string }): string {
   return secret;
 }
 
-async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
+async function fetchJson(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10_000,
+): Promise<unknown> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
     if (!response.ok) {
+      logger.warn("Card scan upstream HTTP error", {
+        status: response.status,
+        host: new URL(url).host,
+        path: new URL(url).pathname,
+      });
       throw new ProviderFailure(response.status >= 500 || response.status === 429
         ? "upstream_unavailable"
         : "upstream_error");
@@ -196,6 +204,38 @@ async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function googleAccessToken(): Promise<string> {
+  const response = await fetch(
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    { headers: { "Metadata-Flavor": "Google" } },
+  );
+  if (!response.ok) {
+    throw new ProviderFailure("upstream_unavailable");
+  }
+  const body = asRecord(await response.json());
+  const token = typeof body?.access_token === "string" ? body.access_token : "";
+  if (!token) {
+    throw new ProviderFailure("upstream_unavailable");
+  }
+  return token;
+}
+
+function firstModelText(result: unknown): string {
+  const parts = valueAtPath(result, "candidates", "0", "content", "parts");
+  if (!Array.isArray(parts)) {
+    const single = valueAtPath(result, "candidates", "0", "content", "parts", "0", "text");
+    return typeof single === "string" ? single : "";
+  }
+  return parts
+    .map((part) => {
+      const record = asRecord(part);
+      return typeof record?.text === "string" ? record.text : "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
 function failure<T>(
@@ -234,12 +274,20 @@ function geminiPart(image: CardImage): Record<string, unknown> {
 }
 
 async function scanWithGemini(request: ScanRequest): Promise<ProviderResult<GeminiEvidence>> {
+  const model = "gemini-2.5-flash";
   try {
-    const apiKey = secretValue(GEMINI_API_KEY);
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const token = await googleAccessToken();
+    const endpoint = [
+      "https://us-central1-aiplatform.googleapis.com/v1/projects/vaultables",
+      "locations/us-central1/publishers/google/models",
+      `${model}:generateContent`,
+    ].join("/");
     const result = await fetchJson(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
         contents: [{
           role: "user",
@@ -262,17 +310,23 @@ async function scanWithGemini(request: ScanRequest): Promise<ProviderResult<Gemi
         generationConfig: {
           responseMimeType: "application/json",
           temperature: 0,
+          maxOutputTokens: 2048,
         },
       }),
-    });
-    const text = valueAtPath(result, "candidates", "0", "content", "parts", "0", "text");
-    if (typeof text !== "string" || text.length === 0 || text.length > 20_000) {
+    }, 25_000);
+    const text = firstModelText(result);
+    if (!text || text.length > 20_000) {
+      logger.warn("Gemini returned empty or oversized text", {
+        model,
+        length: text.length,
+        finishReason: valueAtPath(result, "candidates", "0", "finishReason"),
+      });
       throw new ProviderFailure("upstream_error");
     }
     try {
       return {
         status: "available",
-        evidence: { model: "gemini-2.0-flash", extracted: normalizeFields(JSON.parse(text)) },
+        evidence: { model, extracted: normalizeFields(JSON.parse(text)) },
       };
     } catch {
       throw new ProviderFailure("upstream_error");
