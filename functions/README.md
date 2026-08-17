@@ -115,6 +115,22 @@ deny clients all writes to escrows, payment records, webhook receipts, payout
 configuration, payment IDs, release fields, and dispute records. A missing
 payout account or failed transfer leaves funds held with an explicit response.
 
+## App Check
+
+Android sends `X-Firebase-AppCheck` on every `/api/v1` call.
+
+- Default is **monitor**: missing/invalid tokens are logged, not rejected.
+- After a debug token is registered (or a Play Integrity release build is live), enforce:
+
+```sh
+gcloud run services update api --project=vaultables --region=us-central1 \
+  --update-env-vars=APP_CHECK_ENFORCE=1
+```
+
+Do not put App Check on `stripeWebhook`. Stripe cannot send a Play Integrity token.
+
+Debug APK: logcat `DebugAppCheckProvider` token → Firebase Console → App Check → Manage debug tokens.
+
 ## Testing and operations
 
 `npm --prefix functions test` compiles the backend and runs focused scan-payload

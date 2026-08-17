@@ -14,6 +14,7 @@ import {
   STRIPE_WEBHOOK_SECRET,
 } from "./config.js";
 import { analyzeCard } from "./providers.js";
+import { appCheckMiddleware } from "./appcheck.js";
 import {
   ApiError,
   validateDispute,
@@ -804,6 +805,7 @@ type ProtectedHandler = (request: Request, response: Response, user: DecodedIdTo
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "6mb", type: "application/json" }));
+app.use("/api/v1", appCheckMiddleware);
 
 function protectedPost(path: string, handler: ProtectedHandler): void {
   app.post(path, async (request, response, next) => {

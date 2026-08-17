@@ -19,6 +19,7 @@ object NetworkModule {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         .writeTimeout(90, TimeUnit.SECONDS)
+        .addInterceptor(AppCheckHeaderInterceptor())
         .build()
 
     private val retrofit: Retrofit = Retrofit.Builder()

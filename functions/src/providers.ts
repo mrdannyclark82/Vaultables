@@ -65,7 +65,7 @@ export type ScanAnalysis = {
   notices: ProviderNotice[];
 };
 
-class ProviderFailure extends Error {
+export class ProviderFailure extends Error {
   constructor(
     readonly kind: "not_configured" | "upstream_unavailable" | "upstream_error",
   ) {
@@ -73,6 +73,42 @@ class ProviderFailure extends Error {
     this.name = "ProviderFailure";
   }
 }
+
+const CARDSIGHT_USER_AGENT = "Vaultables/1.0 (card-scan)";
+const CARDSIGHT_SEGMENT_ALIASES: Record<string, string> = {
+  baseball: "baseball",
+  mlb: "baseball",
+  football: "football",
+  nfl: "football",
+  basketball: "basketball",
+  nba: "basketball",
+  hockey: "hockey",
+  nhl: "hockey",
+  pokemon: "pokemon",
+  "pokemon tcg": "pokemon",
+  "pokémon": "pokemon",
+  "pokémon tcg": "pokemon",
+  magic: "magic",
+  mtg: "magic",
+  "magic the gathering": "magic",
+  soccer: "soccer",
+  wrestling: "wrestling",
+  wwe: "wrestling",
+  racing: "racing",
+  nascar: "racing",
+  golf: "golf",
+  tennis: "tennis",
+  yugioh: "yugioh",
+  "yu-gi-oh": "yugioh",
+  lorcana: "lorcana",
+  onepiece: "onepiece",
+  "one piece": "onepiece",
+};
+const CARDSIGHT_CONFIDENCE_RANK: Record<string, number> = {
+  High: 3,
+  Medium: 2,
+  Low: 1,
+};
 
 function emptyFields(): Omit<ExtractedCardFields, "fieldSources"> {
   return {
@@ -336,42 +372,206 @@ async function scanWithGemini(request: ScanRequest): Promise<ProviderResult<Gemi
   }
 }
 
+export function cardSightSegment(category?: string): string | undefined {
+  if (!category) {
+    return undefined;
+  }
+  const normalized = category.trim().toLowerCase().replace(/\s+/g, " ");
+  const aliased = CARDSIGHT_SEGMENT_ALIASES[normalized];
+  if (aliased) {
+    return aliased;
+  }
+  if (/^[a-z][a-z0-9-]{1,40}$/.test(normalized)) {
+    return normalized;
+  }
+  return undefined;
+}
+
+export function cardSightIdentifyUrl(baseUrl: string, category?: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new ProviderFailure("not_configured");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new ProviderFailure("not_configured");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host === "example.com" || host.endsWith(".example.com")) {
+    throw new ProviderFailure("not_configured");
+  }
+  const segment = cardSightSegment(category);
+  const path = segment
+    ? `/v1/identify/card/${encodeURIComponent(segment)}`
+    : "/v1/identify/card";
+  return new URL(path, `${parsed.origin}/`).toString();
+}
+
+function cardSightDetectionRank(detection: Record<string, unknown>): number {
+  const card = asRecord(detection.card) ?? {};
+  const match = fieldValue(card, "id") ? 200 : fieldValue(card, "setId") ? 100 : 0;
+  const confidence = typeof detection.confidence === "string"
+    ? (CARDSIGHT_CONFIDENCE_RANK[detection.confidence] ?? 0)
+    : 0;
+  return match + confidence;
+}
+
+export function pickBestCardSightDetection(
+  result: unknown,
+): Record<string, unknown> | undefined {
+  const root = asRecord(result);
+  const payload = asRecord(root?.data) ?? root;
+  const detections = payload?.detections;
+  if (!Array.isArray(detections) || detections.length === 0) {
+    return undefined;
+  }
+
+  let best: Record<string, unknown> | undefined;
+  let bestRank = -1;
+  for (const entry of detections) {
+    const record = asRecord(entry);
+    if (!record) {
+      continue;
+    }
+    const rank = cardSightDetectionRank(record);
+    if (rank > bestRank) {
+      best = record;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
+function cardSightSetLabel(card: Record<string, unknown> | undefined): NullableString {
+  const setName = fieldValue(card, "setName", "set");
+  const releaseName = fieldValue(card, "releaseName");
+  if (setName && releaseName && setName !== releaseName) {
+    const combined = `${releaseName} ${setName}`;
+    return combined.length <= 240 ? combined : setName;
+  }
+  return setName ?? releaseName;
+}
+
+function cardSightMessages(payload: Record<string, unknown> | undefined): string[] {
+  if (!Array.isArray(payload?.messages)) {
+    return [];
+  }
+  return payload.messages.flatMap((entry) => {
+    const record = asRecord(entry);
+    const text = fieldValue(record, "message", "text");
+    return text ? [text] : [];
+  });
+}
+
+export function mapCardSightIdentifyResponse(result: unknown): CardSightEvidence {
+  const root = asRecord(result);
+  const payload = asRecord(root?.data) ?? root;
+  if (!payload) {
+    throw new ProviderFailure("upstream_error");
+  }
+
+  const detection = pickBestCardSightDetection(payload);
+  const card = asRecord(detection?.card);
+  const grading = asRecord(detection?.grading);
+  const company = asRecord(grading?.company);
+  const grade = asRecord(grading?.grade);
+  const parallel = asRecord(card?.parallel);
+  const qualifier = asRecord(grading?.qualifier);
+
+  const name = fieldValue(card, "name", "title", "cardName");
+  const parallelName = fieldValue(parallel, "name");
+  const title = name && parallelName ? `${name} ${parallelName}` : name;
+  const observations: string[] = cardSightMessages(payload);
+  if (typeof detection?.confidence === "string" && detection.confidence.length <= 32) {
+    observations.push(`CardSight confidence: ${detection.confidence}`);
+  }
+  if (parallelName) {
+    const numbered = typeof parallel?.numberedTo === "number" ? ` /${parallel.numberedTo}` : "";
+    observations.push(`Parallel: ${parallelName}${numbered}`);
+  }
+  const qualifierCode = fieldValue(qualifier, "code");
+  if (qualifierCode) {
+    observations.push(`Grade qualifier: ${qualifierCode}`);
+  }
+
+  const extracted = {
+    identity: {
+      title,
+      brand: fieldValue(card, "manufacturer", "brand"),
+      set: cardSightSetLabel(card),
+      year: fieldValue(card, "year"),
+      cardNumber: fieldValue(card, "number", "cardNumber"),
+    },
+    visibleCertification: {
+      company: fieldValue(company, "name", "company", "grader"),
+      serialNumber: fieldValue(grading, "serialNumber", "serial", "certNumber"),
+      grade: fieldValue(grade, "value", "grade") ?? (
+        typeof grading?.grade === "string" ? boundedString(grading.grade) : null
+      ),
+    },
+    conditionObservations: observations,
+  };
+
+  return {
+    providerReference: fieldValue(payload, "requestId", "id", "reference"),
+    matched: Boolean(fieldValue(card, "id") || extracted.identity.title || extracted.identity.set),
+    extracted,
+  };
+}
+
+function imageFilename(image: CardImage): string {
+  if (image.mimeType === "image/png") {
+    return "card.png";
+  }
+  if (image.mimeType === "image/webp") {
+    return "card.webp";
+  }
+  return "card.jpg";
+}
+
+async function identifyCardSightImage(
+  apiKey: string,
+  endpoint: string,
+  image: CardImage,
+): Promise<unknown> {
+  const bytes = new Uint8Array(Buffer.from(image.dataBase64, "base64"));
+  const file = new File([bytes], imageFilename(image), { type: image.mimeType });
+  const form = new FormData();
+  form.append("image", file);
+  return fetchJson(endpoint, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      "User-Agent": CARDSIGHT_USER_AGENT,
+    },
+    body: form,
+  }, 25_000);
+}
+
 async function scanWithCardSight(request: ScanRequest): Promise<ProviderResult<CardSightEvidence>> {
   try {
     const apiKey = secretValue(CARDSIGHT_API_KEY);
-    let endpoint: string;
+    let baseUrl: string;
     try {
-      endpoint = CARDSIGHT_API_URL.value();
+      baseUrl = CARDSIGHT_API_URL.value();
     } catch {
       throw new ProviderFailure("not_configured");
     }
-    if (!endpoint || !/^https:\/\//.test(endpoint)) {
+    if (!baseUrl) {
       throw new ProviderFailure("not_configured");
     }
-    const result = await fetchJson(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        images: request.images,
-        category: request.category,
-      }),
-    });
-    const root = asRecord(result);
-    if (!root) {
-      throw new ProviderFailure("upstream_error");
+    const endpoint = cardSightIdentifyUrl(baseUrl, request.category);
+    const front = mapCardSightIdentifyResponse(
+      await identifyCardSightImage(apiKey, endpoint, request.images.front),
+    );
+    if (front.matched) {
+      return { status: "available", evidence: front };
     }
-    const extracted = normalizeFields(root.data ?? root);
-    return {
-      status: "available",
-      evidence: {
-        providerReference: fieldValue(root, "id", "requestId", "reference"),
-        matched: Object.values(extracted.identity).some(Boolean),
-        extracted,
-      },
-    };
+    const back = mapCardSightIdentifyResponse(
+      await identifyCardSightImage(apiKey, endpoint, request.images.back),
+    );
+    return { status: "available", evidence: back.matched ? back : front };
   } catch (error) {
     return failure("cardsight", error);
   }
@@ -414,19 +614,77 @@ function mergeEvidence(
   };
 }
 
+export function isUsableCustomSearchCx(cx: string): boolean {
+  const value = cx.trim();
+  if (!value || value.length < 10 || value.length > 80) {
+    return false;
+  }
+  if (/placeholder|changeme|dummy|example|not-configured|your[-_]?cx|todo/i.test(value)) {
+    return false;
+  }
+  return /^[0-9]{10,}:[A-Za-z0-9_-]+$/.test(value) || /^[A-Za-z0-9_-]{17,}$/.test(value);
+}
+
+function searchQuery(extracted: ExtractedCardFields): string {
+  return [extracted.identity.title, extracted.identity.brand, extracted.identity.set]
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+}
+
+export function mapCardSightCatalogSearch(result: unknown, query: string): SearchEvidence {
+  const root = asRecord(result);
+  const payload = asRecord(root?.data) ?? root;
+  const rows = payload?.results ?? payload?.cards;
+  const matches = Array.isArray(rows)
+    ? rows.map((entry) => {
+      const record = asRecord(entry);
+      const name = fieldValue(record, "name", "title") ?? "";
+      const id = fieldValue(record, "id");
+      const year = fieldValue(record, "year");
+      const setName = fieldValue(record, "setName", "releaseName", "set");
+      const kind = fieldValue(record, "type");
+      const snippet = [year, setName, kind].filter(Boolean).join(" · ");
+      const link = fieldValue(record, "url", "link")
+        ?? (id ? `https://cardsight.ai/cards/${id}` : "https://cardsight.ai");
+      return { title: name, link, snippet };
+    }).filter((item) => item.title).slice(0, 5)
+    : [];
+  return { query, matches };
+}
+
+async function searchCardSightCatalog(query: string): Promise<ProviderResult<SearchEvidence>> {
+  const apiKey = secretValue(CARDSIGHT_API_KEY);
+  let baseUrl: string;
+  try {
+    baseUrl = CARDSIGHT_API_URL.value();
+  } catch {
+    throw new ProviderFailure("not_configured");
+  }
+  const endpoint = cardSightIdentifyUrl(baseUrl).replace(/\/v1\/identify\/card$/, "/v1/catalog/search");
+  const url = new URL(endpoint);
+  url.searchParams.set("q", query);
+  url.searchParams.set("take", "5");
+  const result = await fetchJson(url.toString(), {
+    method: "GET",
+    headers: {
+      "X-API-Key": apiKey,
+      "User-Agent": CARDSIGHT_USER_AGENT,
+    },
+  }, 15_000);
+  return { status: "available", evidence: mapCardSightCatalogSearch(result, query) };
+}
+
 async function searchGoogle(
   extracted: ExtractedCardFields,
 ): Promise<ProviderResult<SearchEvidence>> {
-  const query = [extracted.identity.title, extracted.identity.brand, extracted.identity.set]
-    .filter((value): value is string => Boolean(value))
-    .join(" ");
+  const query = searchQuery(extracted);
   if (!query) {
     return {
       status: "skipped",
       notice: {
         provider: "googleCustomSearch",
         code: "skipped",
-        message: "Google Custom Search was skipped because no provider identified a card.",
+        message: "Search was skipped because no provider identified a card.",
       },
     };
   }
@@ -434,24 +692,32 @@ async function searchGoogle(
   try {
     const apiKey = secretValue(GOOGLE_CUSTOM_SEARCH_API_KEY);
     const cx = secretValue(GOOGLE_CUSTOM_SEARCH_CX);
-    const url = new URL("https://www.googleapis.com/customsearch/v1");
-    url.searchParams.set("key", apiKey);
-    url.searchParams.set("cx", cx);
-    url.searchParams.set("q", query);
-    url.searchParams.set("num", "5");
-    const result = await fetchJson(url.toString(), { method: "GET" });
-    const items = valueAtPath(result, "items");
-    const matches = Array.isArray(items)
-      ? items.map((item) => {
-        const record = asRecord(item);
-        return {
-          title: fieldValue(record, "title") ?? "",
-          link: fieldValue(record, "link") ?? "",
-          snippet: fieldValue(record, "snippet") ?? "",
-        };
-      }).filter((item) => item.title && item.link).slice(0, 5)
-      : [];
-    return { status: "available", evidence: { query, matches } };
+    if (isUsableCustomSearchCx(cx)) {
+      const url = new URL("https://www.googleapis.com/customsearch/v1");
+      url.searchParams.set("key", apiKey);
+      url.searchParams.set("cx", cx);
+      url.searchParams.set("q", query);
+      url.searchParams.set("num", "5");
+      const result = await fetchJson(url.toString(), { method: "GET" });
+      const items = valueAtPath(result, "items");
+      const matches = Array.isArray(items)
+        ? items.map((item) => {
+          const record = asRecord(item);
+          return {
+            title: fieldValue(record, "title") ?? "",
+            link: fieldValue(record, "link") ?? "",
+            snippet: fieldValue(record, "snippet") ?? "",
+          };
+        }).filter((item) => item.title && item.link).slice(0, 5)
+        : [];
+      return { status: "available", evidence: { query, matches } };
+    }
+  } catch {
+    // Custom Search JSON API is closed to new GCP customers (403). Fall through.
+  }
+
+  try {
+    return await searchCardSightCatalog(query);
   } catch (error) {
     return failure("googleCustomSearch", error);
   }

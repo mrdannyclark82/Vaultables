@@ -20,7 +20,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
-            FirebaseApp.initializeApp(this)
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                FirebaseApp.initializeApp(this)
+            }
         } catch (e: Exception) {
             Log.d("MainActivity", "FirebaseApp initialization notice: ${e.message}")
         }
