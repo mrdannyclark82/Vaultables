@@ -46,7 +46,7 @@ fun ScanReviewDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    "Nothing is in your vault until you save. Gemini may be wrong. CardSight and price search are not live.",
+                    "Nothing is in your vault until you save. Gemini can be wrong. CardSight IDs when it can; Google price search is not live.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

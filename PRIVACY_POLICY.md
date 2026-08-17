@@ -1,75 +1,98 @@
-**Disclaimer: This is a template and not legal advice. You should consult with a legal professional to ensure this privacy policy is compliant with all applicable laws and regulations for your specific use case.**
-
 # Privacy Policy for Vaultables
 
 **Last updated:** August 17, 2026
 
-Thank you for using Vaultables ("we," "us," or "our"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application (the "App"). Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.
+Vaultables is a collectibles vault and marketplace app operated by Danny Ray Clark (“we,” “us”). This policy describes what the **current shipping app** actually collects and who sees it. It is not a generic template.
 
-We reserve the right to make changes to this Privacy Policy at any time and for any reason. We will alert you about any changes by updating the "Last updated" date of this Privacy-Policy.
+If you do not agree, do not use the app.
 
-## COLLECTION OF YOUR INFORMATION
+## Who we are
 
-We may collect information about you in a variety of ways. The information we may collect via the App depends on the content and materials you use, and includes:
+**Contact:** mrdannyclark82@gmail.com
 
-### Personal Data
+## What we collect
 
-Personally identifiable information, such as your name, and email address, that you voluntarily give to us when you register with the App.
+### Account
 
-### Derivative Data
+If you sign in, Firebase Authentication stores your Google account identifier, display name, and email so we can keep your vault attached to you.
 
-Information our servers automatically collect when you access the App, such as your native actions that are integral to the App, including liking, re-blogging, or replying to a post, as well as other interactions with the App and other users via server log files. This may also include your device type, IP address, and operating system.
+### Vault and marketplace data
 
-### Financial Data
+Items you choose to save (title, set/brand, year, notes, local photo paths, and related fields) can be stored on your device and synced to Cloud Firestore under your account.
 
-We do not collect financial information, such as data related to your payment method (e.g. valid credit card number, card brand, expiration date).
+### Camera and scan images
 
-### Data from AI and Scanning Features
+Vaultables asks for **camera** permission only to photograph cards and other collectibles. Photos you submit for identification are sent to our Cloud Function (`api` on Google Cloud Run in `us-central1`) so we can return a suggested ID. Nothing is added to your vault until you tap save.
 
-When you use the AI-powered scanning features of our App, we may collect images and other data you provide. This data may be processed by third-party services, such as Google's Gemini, to provide the AI functionality.
+Scan photos may be processed by:
 
-### Firebase
+- **Google Vertex Gemini** (card/item understanding and appraisal text)
+- **CardSight** (card identification and catalog search)
 
-We use Firebase for backend services, which may collect information about you. For more information on the data Firebase collects, please review the [Firebase Privacy Policy](https://firebase.google.com/support/privacy).
+We do not sell your scan images. Providers receive the image (or a resized copy) only to return a result.
 
-## USE OF YOUR INFORMATION
+### Price / web search
 
-Having accurate information about you permits us to provide you with a smooth, efficient, and customized experience. Specifically, we may use information collected about you via the App to:
+Google Custom Search is **not live**. Catalog/price fallback uses CardSight when available.
 
-1.  Create and manage your account.
-2.  Provide and operate the App's features and services.
-3.  Process and analyze the images and data you provide through the AI scanning features.
-4.  Monitor and analyze usage and trends to improve your experience with the App.
-5.  Notify you of updates to the App.
-6.  Respond to your comments and questions and provide customer service.
+### Payments
 
-## DISCLOSURE OF YOUR INFORMATION
+In-app checkout, escrow, and Stripe charges are **not live**. The app does not collect card numbers. Preview screens exist for a future flow. If payments go live later, this policy will be updated and Stripe will process the payment — we still will not store full card numbers.
 
-We may share information we have collected about you in certain situations. Your information may be disclosed as follows:
+### Messages
 
-### By Law or to Protect Rights
+In-app messages are **not end-to-end encrypted**. Treat them as ordinary server-stored chat, not a secure messenger.
 
-If we believe the release of information about you is necessary to respond to legal process, to investigate or remedy potential violations of our policies, or to protect the rights, property, and safety of others, we may share your information as permitted or required by any applicable law, rule, or regulation.
+### App integrity
 
-### Third-Party Service Providers
+We use Firebase App Check (Play Integrity on release builds; a debug provider on development builds) so our backend can tell a real app install from casual abuse. That involves device/app attestation tokens, not your vault photos.
 
-We may share your information with third parties that perform services for us or on our behalf, including data analysis, email delivery, hosting services, customer service, and marketing assistance. This includes sharing data with Google for the purpose of providing AI features through Gemini.
+### Automatically collected
 
-## SECURITY OF YOUR INFORMATION
+Our servers and Google Cloud / Firebase may log IP address, user-agent, timestamps, and error diagnostics needed to run the service.
 
-We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable, and no method of data transmission can be guaranteed against any interception or other type of misuse.
+## What we do not collect
 
-## YOUR RIGHTS
+- Precise location
+- Contacts or call logs
+- Full payment card numbers
+- Information from children we know are under 13
 
-You have the right to access, correct, or delete your personal information. You may do so by contacting us at the contact information below.
+## How we use it
 
-## CHILDREN'S PRIVACY
+- Create and maintain your account and vault
+- Identify collectibles you photograph
+- Sync your saved inventory
+- Secure the API (auth + App Check)
+- Diagnose failures
 
-We do not knowingly solicit information from or market to children under the age of 13. If you become aware of any data we have collected from children under age 13, please contact us using the contact information provided below.
+## Who we share with
 
-## CONTACT US
+| Recipient | Why |
+|-----------|-----|
+| Google Firebase / Cloud (Auth, Firestore, Cloud Run, Vertex Gemini, App Check) | Account, sync, scan backend, integrity |
+| CardSight | Card identification and catalog search on scans you submit |
+| Law enforcement / legal process | Only if required by law |
 
-If you have questions or comments about this Privacy Policy, please contact us at:
+We do not sell personal information.
 
-Vaultables
+## Retention
+
+Account and vault data stay until you ask us to delete them or you delete your account. Scan images are processed to produce a result; we do not run a separate public photo dump. Server logs are kept only as long as needed for operations and abuse response.
+
+## Your rights
+
+Email **mrdannyclark82@gmail.com** to access, correct, or delete your account and vault data. We will verify it is you first.
+
+## Children
+
+Vaultables is not directed at children under 13. We do not knowingly collect their data. If you think we have, email us and we will delete it.
+
+## Changes
+
+We will update the “Last updated” date when this policy changes. Material changes (for example, turning payments on) will be reflected here before those features go live.
+
+## Contact
+
+Vaultables  
 mrdannyclark82@gmail.com
