@@ -302,7 +302,7 @@ fun ProfileHubScreen(
                     )
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                 // Dark Mode Switch
                 Row(
@@ -328,7 +328,7 @@ fun ProfileHubScreen(
                     )
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                 // User Sales & Net Earnings Analytics Section
                 var showEarningsDetails by remember { mutableStateOf(false) }
@@ -390,7 +390,7 @@ fun ProfileHubScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
                         Spacer(modifier = Modifier.height(10.dp))
 
@@ -444,7 +444,7 @@ fun ProfileHubScreen(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                 // Export Activity PDF Report Button
                 Row(
@@ -467,7 +467,7 @@ fun ProfileHubScreen(
                     Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Go")
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
 
                 // Export Vault CSV Ledger Button
                 Row(

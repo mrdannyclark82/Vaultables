@@ -88,7 +88,7 @@ fun ShippingLabelDialog(
                     )
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.Black)
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.Black)
 
                 // FROM / TO
                 Row(modifier = Modifier.fillMaxWidth()) {

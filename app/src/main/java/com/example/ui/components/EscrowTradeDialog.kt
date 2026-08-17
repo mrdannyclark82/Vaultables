@@ -85,7 +85,7 @@ fun EscrowTradeDialog(
                         )
 
                         Spacer(modifier = Modifier.height(10.dp))
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Row(
@@ -115,7 +115,7 @@ fun EscrowTradeDialog(
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Row(

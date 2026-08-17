@@ -685,7 +685,7 @@ fun ItemDetailScreen(
                                 color = EmeraldVerified
                             )
                         }
-                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
                     }
                 }
             }

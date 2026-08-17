@@ -485,6 +485,77 @@ fun CameraScanPreviewView(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val boxWidth = size.width * 0.7f
+                val boxHeight = boxWidth * 1.4f
+                val left = (size.width - boxWidth) / 2f
+                val top = (size.height - boxHeight) / 2f
+                val right = left + boxWidth
+                val bottom = top + boxHeight
+                
+                // Dimming scrim around the focal point
+                val scrimColor = Color.Black.copy(alpha = 0.6f)
+                drawRect(color = scrimColor, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, top))
+                drawRect(color = scrimColor, topLeft = androidx.compose.ui.geometry.Offset(0f, bottom), size = androidx.compose.ui.geometry.Size(size.width, size.height - bottom))
+                drawRect(color = scrimColor, topLeft = androidx.compose.ui.geometry.Offset(0f, top), size = androidx.compose.ui.geometry.Size(left, boxHeight))
+                drawRect(color = scrimColor, topLeft = androidx.compose.ui.geometry.Offset(right, top), size = androidx.compose.ui.geometry.Size(size.width - right, boxHeight))
+                
+                // Glowing corner brackets
+                val bracketColor = GoldAccent
+                val bracketLength = 32.dp.toPx()
+                val bracketThickness = 4.dp.toPx()
+                val strokeStyle = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = bracketThickness, 
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round
+                )
+                
+                // Top Left
+                drawPath(
+                    path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(left, top + bracketLength)
+                        lineTo(left, top)
+                        lineTo(left + bracketLength, top)
+                    },
+                    color = bracketColor,
+                    style = strokeStyle
+                )
+                
+                // Top Right
+                drawPath(
+                    path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(right - bracketLength, top)
+                        lineTo(right, top)
+                        lineTo(right, top + bracketLength)
+                    },
+                    color = bracketColor,
+                    style = strokeStyle
+                )
+                
+                // Bottom Left
+                drawPath(
+                    path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(left, bottom - bracketLength)
+                        lineTo(left, bottom)
+                        lineTo(left + bracketLength, bottom)
+                    },
+                    color = bracketColor,
+                    style = strokeStyle
+                )
+                
+                // Bottom Right
+                drawPath(
+                    path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(right - bracketLength, bottom)
+                        lineTo(right, bottom)
+                        lineTo(right, bottom - bracketLength)
+                    },
+                    color = bracketColor,
+                    style = strokeStyle
+                )
+            }
+
             Button(
                 onClick = {
                     val capture = imageCapture ?: return@Button
