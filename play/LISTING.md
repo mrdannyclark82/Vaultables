@@ -1,22 +1,24 @@
-# Play Console paste pack (2026-08-17)
+# Play Console paste pack
 
-Upload key and AAB live **outside git**. Screenshots are in `play/screenshots/play-console/`.
+Published to **closed testing (alpha)** 2026-08-18 as `0.0.0.1` / version code 1. Store listing below is what Google accepted after the financial-declaration reject. Upload key and AAB live **outside git**. Screenshots are in `play/screenshots/play-console/`.
+
+Do **not** put Stripe, escrow, marketplace checkout, or “payments not live” back in the store listing while the Play account is personal.
 
 ## App identity
 
 | Field | Value |
 |-------|--------|
-| App name | Vaultables |
+| App name (store) | Vault Collectibles |
 | Package | `com.aistudio.collectiblesvault.app` |
 | Default language | English (United States) |
 | Category | Lifestyle (or Tools — pick one and keep it) |
 | Email | mrdannyclark82@gmail.com |
-| Privacy policy URL | `https://github.com/mrdannyclark82/Vaultables/blob/main/PRIVACY_POLICY.md` (until a dedicated host is up) |
+| Privacy policy URL | `https://vaultables.web.app/privacy` |
 
 ## Short description (≤80 chars)
 
 ```
-Photograph cards, review the ID, and save them to your vault. Payments not live.
+Photograph cards, review the ID, and save them to your vault.
 ```
 
 ## Full description
@@ -24,13 +26,15 @@ Photograph cards, review the ID, and save them to your vault. Payments not live.
 ```
 Vaultables is a collectibles vault for sports cards and other items.
 
-Scan a card with your camera. Review the suggested title, set, and year. Nothing is added to your vault until you save. Identification uses Gemini and CardSight. Google web price search is not live.
+Scan a card with your camera. Review the suggested title, set, and year. Nothing is added to your vault until you save. Identification uses Gemini and CardSight. Price lookup is not live.
 
-Your vault can sync when you sign in with Google. Marketplace, escrow, and Stripe checkout are previews — they will not charge a card.
+Your vault can sync when you sign in with Google.
+
+This first Play release is a personal catalog and scanner. It does not provide banking, payments, loans, wallets, or other financial services.
 
 Messages are ordinary in-app chat, not end-to-end encryption.
 
-This first Play release is the honest vault + scanner. Features that are not live say so in the app.
+Features that are not live say so in the app.
 ```
 
 ## Phone screenshots (1080×1920 JPEG)

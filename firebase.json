@@ -20,6 +20,13 @@
   "hosting": [
     {
       "target": "api",
+      "public": "public",
+      "cleanUrls": true,
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
       "rewrites": [
         {
           "source": "api/v1/stripe/webhook",
