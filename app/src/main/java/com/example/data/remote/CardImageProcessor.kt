@@ -15,10 +15,18 @@ data class CardImageQuality(
 object CardImageProcessor {
     private const val MAX_UPLOAD_BYTES = 2_000_000
     fun assessQuality(context: Context, imageUri: Uri): CardImageQuality {
-        val bitmap = decodeBitmap(context, imageUri) ?: return CardImageQuality(
+        // Optimization: Use inSampleSize to decode a much smaller version of the image for quality assessment
+        // Since we scale it to 256px anyway, we can decode at a lower resolution (e.g., 1/8th or 1/16th)
+        val bitmap = decodeBitmap(context, imageUri, sampleSize = 8) ?: return CardImageQuality(
             isClear = false,
             issues = listOf("The photo could not be read. Capture it again.")
         )
+        val quality = assessBitmapQuality(bitmap)
+        bitmap.recycle()
+        return quality
+    }
+
+    fun assessBitmapQuality(bitmap: Bitmap): CardImageQuality {
         val preview = Bitmap.createScaledBitmap(bitmap, 256, (bitmap.height * 256f / bitmap.width).toInt().coerceAtLeast(1), true)
         val pixels = IntArray(preview.width * preview.height)
         preview.getPixels(pixels, 0, preview.width, 0, 0, preview.width, preview.height)
@@ -46,14 +54,20 @@ object CardImageProcessor {
         }
 
         val issues = buildList {
-            if (bitmap.width < 1000 || bitmap.height < 1000) add("Move closer so the card text is readable.")
+            // Adjust threshold for bitmap-based check which might be low-res
+            if (bitmap.width < 500 || bitmap.height < 500) {
+                // If it's a preview frame, we don't care as much about resolution yet
+            } else if (bitmap.width < 1000 || bitmap.height < 1000) {
+                add("Move closer so the card text is readable.")
+            }
+            
             if (average < 55) add("Add more light; the card is too dark.")
             if (average > 220) add("Reduce direct light; the card is overexposed.")
             if (glarePixels.toDouble() / luminance.size > 0.08) add("Tilt the card to remove glare before recapturing.")
             if (contrast < 24 || edgeDifference / edgeCount < 12) add("Hold the camera steady and let it focus before capturing.")
         }
         preview.recycle()
-        bitmap.recycle()
+        // Note: we don't recycle 'bitmap' here because it might be reused by the caller (ImageAnalysis)
         return CardImageQuality(isClear = issues.isEmpty(), issues = issues)
     }
 
@@ -78,6 +92,16 @@ object CardImageProcessor {
         }
     }
 
-    private fun decodeBitmap(context: Context, imageUri: Uri): Bitmap? =
-        context.contentResolver.openInputStream(imageUri)?.use(BitmapFactory::decodeStream)
+    private fun decodeBitmap(context: Context, imageUri: Uri, sampleSize: Int = 1): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        return try {
+            context.contentResolver.openInputStream(imageUri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

@@ -2,6 +2,8 @@ package com.example.ui.components
 
 import android.util.Log
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -212,6 +214,11 @@ fun AiScannerModal(
                                                     }
                                                 }
                                             }
+                                        }
+                                    },
+                                    onQualityUpdate = { issue ->
+                                        if (!isCheckingImage) {
+                                            imageQualityMessage = issue
                                         }
                                     },
                                     modifier = Modifier.fillMaxSize()
@@ -444,6 +451,7 @@ fun AiScannerModal(
 fun CameraScanPreviewView(
     captureLabel: String,
     onImageCaptured: (Uri?) -> Unit,
+    onQualityUpdate: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -466,8 +474,25 @@ fun CameraScanPreviewView(
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }
                             
-                            val capture = androidx.camera.core.ImageCapture.Builder().build()
+                            val capture = androidx.camera.core.ImageCapture.Builder()
+                                .setCaptureMode(androidx.camera.core.ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                .build()
                             imageCapture = capture
+
+                            val analysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
+                            
+                            var lastAnalysisTime = 0L
+                            analysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastAnalysisTime >= 600) {
+                                    lastAnalysisTime = currentTime
+                                    val issue = analyzeRealtimeQuality(imageProxy)
+                                    onQualityUpdate(issue)
+                                }
+                                imageProxy.close()
+                            }
                             
                             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
                             cameraProvider.unbindAll()
@@ -475,7 +500,8 @@ fun CameraScanPreviewView(
                                 lifecycleOwner,
                                 cameraSelector,
                                 preview,
-                                capture
+                                capture,
+                                analysis
                             )
                         } catch (exc: Exception) {
                             Log.e("CameraScanPreview", "Camera bind exception", exc)
@@ -617,4 +643,28 @@ fun CameraScanPreviewView(
             }
         }
     }
+}
+
+private fun analyzeRealtimeQuality(image: ImageProxy): String? {
+    val plane = image.planes[0]
+    val buffer = plane.buffer
+    val data = ByteArray(buffer.remaining())
+    buffer.get(data)
+
+    var sum = 0L
+    var glareCount = 0
+    val sampleStep = 20 // High step for performance
+    var samples = 0
+    for (i in data.indices step sampleStep) {
+        val v = data[i].toInt() and 0xFF
+        sum += v
+        if (v > 245) glareCount++
+        samples++
+    }
+    if (samples == 0) return null
+    val avg = sum / samples
+    if (avg < 50) return "Too dark. Add more light."
+    if (avg > 230) return "Overexposed. Reduce light."
+    if (glareCount.toDouble() / samples > 0.05) return "Glare detected. Tilt card."
+    return null
 }
