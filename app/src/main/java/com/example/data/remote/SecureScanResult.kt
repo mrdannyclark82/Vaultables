@@ -17,7 +17,13 @@ data class ScanDraft(
     val localBackImagePath: String?,
     val verificationSummary: String,
     val notices: List<String>,
-    val observations: List<String>
+    val observations: List<String>,
+    val marketplaceSearches: List<MarketplaceSearch>
+)
+
+data class MarketplaceSearch(
+    val name: String,
+    val url: String
 )
 
 data class SecureScanResult(
@@ -31,7 +37,8 @@ data class SecureScanResult(
     val certSerialNumber: String = "",
     val observations: List<String> = emptyList(),
     val verificationSummary: String = "",
-    val notices: List<String> = emptyList()
+    val notices: List<String> = emptyList(),
+    val marketplaceSearches: List<MarketplaceSearch> = emptyList()
 )
 
 object SecureScanResultParser {
@@ -48,6 +55,18 @@ object SecureScanResultParser {
                 List(values.length()) { index ->
                     clean(values.optJSONObject(index)?.opt("message"))
                 }.filter(String::isNotBlank)
+            }
+            .orEmpty()
+        val marketplaceSearches = root.optJSONObject("marketplaceSearches")
+            ?.optJSONArray("markets")
+            ?.let { markets ->
+                List(markets.length()) { index ->
+                    val market = markets.optJSONObject(index)
+                    MarketplaceSearch(
+                        name = clean(market?.opt("name")),
+                        url = clean(market?.opt("url"))
+                    )
+                }.filter { it.name.isNotBlank() && it.url.startsWith("https://") }
             }
             .orEmpty()
         val providers = root.optJSONObject("providers")
@@ -70,7 +89,8 @@ object SecureScanResultParser {
             certSerialNumber = clean(certification.opt("serialNumber")),
             observations = observations,
             verificationSummary = providerSummary,
-            notices = notices
+            notices = notices,
+            marketplaceSearches = marketplaceSearches
         )
     }
 

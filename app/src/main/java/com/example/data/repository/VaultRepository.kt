@@ -454,7 +454,8 @@ class VaultRepository(
                 .filter(String::isNotBlank)
                 .joinToString(" | "),
             notices = secureScan.notices,
-            observations = secureScan.observations
+            observations = secureScan.observations,
+            marketplaceSearches = secureScan.marketplaceSearches
         )
     }
 

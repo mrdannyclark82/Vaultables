@@ -62,7 +62,16 @@ export type ScanAnalysis = {
     cardsight: ProviderResult<CardSightEvidence>;
     googleCustomSearch: ProviderResult<SearchEvidence>;
   };
+  marketplaceSearches: MarketplaceSearchEvidence | undefined;
   notices: ProviderNotice[];
+};
+
+export type MarketplaceSearchEvidence = {
+  query: string;
+  markets: Array<{
+    name: "eBay sold" | "Mercari" | "CollX" | "Whatnot";
+    url: string;
+  }>;
 };
 
 export class ProviderFailure extends Error {
@@ -631,6 +640,29 @@ function searchQuery(extracted: ExtractedCardFields): string {
     .join(" ");
 }
 
+export function buildMarketplaceSearchEvidence(
+  extracted: ExtractedCardFields,
+): MarketplaceSearchEvidence | undefined {
+  const query = searchQuery(extracted);
+  if (!query) {
+    return undefined;
+  }
+
+  const encodedQuery = encodeURIComponent(query);
+  return {
+    query,
+    markets: [
+      {
+        name: "eBay sold",
+        url: `https://www.ebay.com/sch/i.html?_nkw=${encodedQuery}&LH_Sold=1&LH_Complete=1`,
+      },
+      { name: "Mercari", url: `https://www.mercari.com/search/?keyword=${encodedQuery}` },
+      { name: "CollX", url: `https://www.collx.app/search?q=${encodedQuery}` },
+      { name: "Whatnot", url: `https://www.whatnot.com/search?query=${encodedQuery}` },
+    ],
+  };
+}
+
 export function mapCardSightCatalogSearch(result: unknown, query: string): SearchEvidence {
   const root = asRecord(result);
   const payload = asRecord(root?.data) ?? root;
@@ -730,8 +762,14 @@ export async function analyzeCard(request: ScanRequest): Promise<ScanAnalysis> {
   ]);
   const extracted = mergeEvidence(gemini, cardsight);
   const googleCustomSearch = await searchGoogle(extracted);
+  const marketplaceSearches = buildMarketplaceSearchEvidence(extracted);
   const notices = [gemini.notice, cardsight.notice, googleCustomSearch.notice]
     .filter((notice): notice is ProviderNotice => Boolean(notice));
 
-  return { extracted, providers: { gemini, cardsight, googleCustomSearch }, notices };
+  return {
+    extracted,
+    providers: { gemini, cardsight, googleCustomSearch },
+    marketplaceSearches,
+    notices,
+  };
 }

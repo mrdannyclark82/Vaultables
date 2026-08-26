@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildMarketplaceSearchEvidence,
   ProviderFailure,
   cardSightIdentifyUrl,
   cardSightSegment,
@@ -171,6 +172,39 @@ test("rejects placeholder Custom Search engine IDs", () => {
   assert.equal(isUsableCustomSearchCx("dummy"), false);
   assert.equal(isUsableCustomSearchCx("012345678901234567890:vaultables"), true);
   assert.equal(isUsableCustomSearchCx("abcdefghijklmnopq"), true);
+});
+
+test("builds live marketplace searches from identified card fields", () => {
+  const searches = buildMarketplaceSearchEvidence({
+    identity: {
+      title: "Aaron Judge Gold Refractor",
+      brand: "Topps",
+      set: "Chrome Base Set",
+      year: "2023",
+      cardNumber: "99",
+    },
+    visibleCertification: { company: null, serialNumber: null, grade: null },
+    conditionObservations: [],
+    fieldSources: {},
+  });
+
+  assert.deepEqual(searches?.markets.map((market) => market.name), [
+    "eBay sold",
+    "Mercari",
+    "CollX",
+    "Whatnot",
+  ]);
+  assert.ok(searches?.markets[0]?.url.includes("LH_Sold=1"));
+  assert.ok(searches?.markets.every((market) => market.url.includes("Aaron%20Judge")));
+});
+
+test("skips marketplace searches when the card cannot be identified", () => {
+  assert.equal(buildMarketplaceSearchEvidence({
+    identity: { title: null, brand: null, set: null, year: null, cardNumber: null },
+    visibleCertification: { company: null, serialNumber: null, grade: null },
+    conditionObservations: [],
+    fieldSources: {},
+  }), undefined);
 });
 
 test("rejects a non-object CardSight payload", () => {

@@ -68,6 +68,12 @@ Responses contain `extracted`, field-level `fieldSources`, provider
 notices; identity, grade, certificate, price, and confidence are never
 invented. Images and secrets are neither logged nor saved in Firestore.
 
+When the card has an identified title, `marketplaceSearches` contains direct
+links for sold eBay listings and live Mercari, CollX, and Whatnot searches.
+These links are provided for user review only: the API does not scrape those
+marketplaces or claim a price, because listing condition, sale status, and
+identity must be verified by the collector.
+
 ### `POST /api/v1/escrow/create-intent`
 
 Send a 16–128-character URL-safe `Idempotency-Key` header and:

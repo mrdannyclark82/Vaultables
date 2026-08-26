@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.ScanDraft
@@ -30,6 +34,7 @@ fun ScanReviewDialog(
     onDismiss: () -> Unit,
     onSave: (title: String, brand: String, year: String) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf(draft.title) }
     var brand by remember { mutableStateOf(draft.brand) }
     var year by remember { mutableStateOf(draft.year) }
@@ -46,7 +51,7 @@ fun ScanReviewDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    "Nothing is in your vault until you save. Gemini can be wrong. CardSight IDs when it can; Google price search is not live.",
+                    "Nothing is in your vault until you save. Identification is advisory and may be wrong.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -85,6 +90,40 @@ fun ScanReviewDialog(
                 }
                 draft.notices.forEach { notice ->
                     Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                if (draft.marketplaceSearches.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Compare live listings",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Listing prices are not an appraisal. Check the exact card, condition, and sale status before using a price.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    draft.marketplaceSearches.forEach { market ->
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(market.url))
+                                if (intent.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(intent)
+                                } else {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "No app is available to open ${market.name}.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            modifier = Modifier.testTag(
+                                "marketplace_search_${market.name.lowercase().replace(" ", "_")}"
+                            )
+                        ) {
+                            Text(market.name)
+                        }
+                    }
                 }
             }
         },
