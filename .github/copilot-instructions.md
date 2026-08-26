@@ -2,60 +2,61 @@
 
 ## Build, test, and lint
 
-This is a single-module Android app (`:app`). There is no committed Gradle wrapper, so use a compatible locally installed Gradle:
+This repository has an Android app (`:app`) and a Firebase Functions backend (`functions`). Use the committed Gradle wrapper:
 
 ```bash
-gradle build
-gradle :app:assembleDebug
-gradle :app:lintDebug
-gradle :app:testDebugUnitTest
-gradle :app:connectedDebugAndroidTest
+./gradlew build
+./gradlew :app:assembleDebug
+./gradlew :app:lintDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest
 ```
 
-Run one JVM test class or method with:
+Run the existing JVM screenshot test, or a single test method, with:
 
 ```bash
-gradle :app:testDebugUnitTest --tests com.example.GeminiServiceTest
-gradle :app:testDebugUnitTest --tests 'com.example.ExampleRobolectricTest.read string from context'
+./gradlew :app:testDebugUnitTest --tests com.example.ui.components.AiScannerModalTest
+./gradlew :app:testDebugUnitTest --tests 'com.example.ui.components.AiScannerModalTest.scanner_modal_initial_state'
 ```
 
-Run one instrumented test class on a connected device/emulator with:
+Run one instrumented test class on a connected device or emulator:
 
 ```bash
-gradle :app:connectedDebugAndroidTest \
+./gradlew :app:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=com.example.ExampleInstrumentedTest
 ```
 
-Roborazzi is configured for screenshot workflows:
+Roborazzi screenshots are recorded by `AiScannerModalTest`:
 
 ```bash
-gradle :app:recordRoborazziDebug
-gradle :app:verifyRoborazziDebug
+./gradlew :app:recordRoborazziDebug
+./gradlew :app:verifyRoborazziDebug
 ```
 
-`GeminiServiceTest` can call the Gemini endpoint when `GEMINI_API_KEY` is configured; its fallback path is used for an absent placeholder key or failed request.
+Functions require Node 20. Install from the lockfile and run the focused backend suite with:
 
-### Test layout and behavior
+```bash
+npm --prefix functions ci
+npm --prefix functions test
+```
 
-- JVM tests live in `app/src/test`. They use JUnit 4; Android-dependent JVM tests use Robolectric with SDK 36. The module enables Android resources for unit tests, so resource and application-context assertions belong in this source set.
-- Device/emulator tests live in `app/src/androidTest` and use `AndroidJUnit4`. They require a connected device or running emulator.
-- The Gemini service test is an integration-style test, not an isolated network mock: it exercises `GeminiService.analyzeAndAppraise`. Run it only when validating that service or its fallback behavior; do not use it as a deterministic offline unit-test template.
-- Keep Compose UI controls discoverable through the existing `testTag` convention. Tests for tab selection, dialogs, and scanner actions should target those tags instead of display text where a tag exists.
+JVM tests use JUnit 4 and Robolectric (SDK 36); Android resources are enabled for JVM tests. Device tests use `AndroidJUnit4`.
 
 ## Architecture
 
 - `MainActivity` initializes Firebase and Stripe, creates the activity-scoped `VaultViewModel`, and renders `MainScreen` inside `VaultTheme`.
-- Compose navigation is manual rather than Navigation Compose: `MainScreen` selects its five tab screens from `VaultUiState.activeTab` and hosts all dialogs/overlays. Preserve this state-hoisting pattern: screen and component callbacks call `VaultViewModel`, while the view model owns transient UI state in `VaultUiState`.
-- `VaultViewModel` exposes Room-backed repository flows as lifecycle-aware `StateFlow`s and translates UI events into `viewModelScope` operations. `VaultRepository` is the data boundary: it coordinates Room DAOs, AI/backend calls, Firestore sync, escrow actions, alerts, and report/currency formatting.
-- Room is the local source of truth. Entities are in `data/model`, DAOs expose ordered `Flow<List<...>>` queries, and `AppDatabase` registers all entities. The database currently uses `fallbackToDestructiveMigration()`; when changing persistent entities, update the database version and affected DAOs deliberately.
-- Adding a collectible follows the repository pipeline: try the Retrofit scanner endpoint, fall back to `GeminiService`, persist the resulting `CollectibleItem`, then attempt Firestore sync. Escrow payment intents similarly use the Retrofit service, while the view model handles its offline sandbox fallback.
+- The Compose app uses manual tab navigation, not Navigation Compose. `MainScreen` selects one of five screens from `VaultUiState.activeTab` and hosts dialogs and overlays. Keep transient UI state in `VaultUiState`; components and screens call view-model callbacks rather than owning application state.
+- `VaultViewModel` exposes repository `Flow`s as lifecycle-aware `StateFlow`s and launches UI operations in `viewModelScope`. `VaultRepository` coordinates Room, the authenticated HTTP services, Firestore syncing, and presentation formatting.
+- Room is the local source of truth. Entities are in `data/model`; DAOs provide ordered flows; `AppDatabase` owns the schema. When changing an entity, increment the database version and add an explicit migration alongside the affected DAOs—this database does not use destructive migration fallback.
+- A secure trading-card scan requires both front and back image URIs. `CardImageProcessor` performs local quality checks; the repository sends validated raw base64 images to the scanner endpoint, retains the returned `ScanDraft` for user review, then persists only after confirmation and attempts Firestore sync.
+- Firebase Functions exposes the authenticated `/api/v1` scanner and escrow APIs. The server derives the UID from the Firebase ID token and App Check header; never add caller-owned user IDs to request bodies. Payment intents are created server-side, and only a verified Stripe webhook creates or advances a real escrow.
 
 ## Repository conventions
 
-- Keep Android code under the existing `com.example` namespace even though the runtime application ID is `com.aistudio.collectiblesvault.app`.
-- Maintain dependencies and plugin versions in `gradle/libs.versions.toml`; the app module uses catalog aliases and KSP for Room and Moshi.
-- `CollectibleItem.category` stores a `CollectibleCategory.displayName`, while `imageType` uses the enum `name`; retain those formats when constructing or filtering items. `EscrowTransaction.status` stores `EscrowStatus.name`, not its display label.
-- Compose interaction surfaces use stable `Modifier.testTag(...)` values in `MainScreen` and scanner UI. Add or preserve tags when changing testable controls.
-- Runtime configuration comes from `.env`, with `.env.example` documenting `STRIPE_PUBLISHABLE_KEY` and `GOOGLE_WEB_CLIENT_ID`. The secrets Gradle plugin exposes these as `BuildConfig` values; do not commit `.env` or real credentials. AI, catalog, search, and Stripe secret keys belong exclusively in Firebase Functions Secret Manager.
-- Trading-card scans require clear front and back captures. `CardImageProcessor` rejects low-resolution, dark, overexposed, glare-heavy, or unfocused images before the authenticated Firebase backend submits evidence to CardSight, Google image search, and Gemini. Keep external verification advisory: only visible card text and a confirmed catalog match should establish an identification.
-- The app targets Java 11 source/bytecode compatibility, Compose Material 3, and min SDK 24.
+- Keep Android packages under `com.example`, despite the runtime application ID being `com.aistudio.collectiblesvault.app`.
+- Use catalog aliases and versions from `gradle/libs.versions.toml`; Room and Moshi code generation use KSP. The app targets Java 11 bytecode, min SDK 24, and Compose Material 3.
+- `CollectibleItem.category` persists `CollectibleCategory.displayName`, while `imageType` persists the enum-style name (for example, `CARD`). `EscrowTransaction.status` persists `EscrowStatus.name`, not its display label.
+- Preserve stable `Modifier.testTag(...)` values on interactive Compose surfaces. UI tests should select tagged controls rather than text whenever a tag exists.
+- `.env.example` documents only Android build-time values (`STRIPE_PUBLISHABLE_KEY` and `GOOGLE_WEB_CLIENT_ID`), exposed through `BuildConfig` by the secrets Gradle plugin. Do not commit `.env` files or provider credentials. Gemini, CardSight, Google Search, and Stripe secret keys belong only in Firebase Functions Secret Manager.
+- The scanner API accepts exactly two raw-base64 images (`front` and `back`), each at most 2 MB after decoding. Treat provider results as advisory: only visible card text and a confirmed catalog match establish an identification; do not manufacture identity, grade, certificate, price, or confidence.
+- Preserve the Functions API contract in `functions/README.md`: scanner and escrow calls require Firebase auth; create-intent uses a URL-safe `Idempotency-Key`; errors are returned as `{"error":{"code":"...","message":"..."}}`.
