@@ -156,3 +156,35 @@ export function validateDispute(body: unknown): { reason: string; details?: stri
   }
   return { reason, details: optionalString(body.details, "details", 1_000) };
 }
+
+export function validateConnectUrls(body: unknown): { returnUrl: string; refreshUrl: string } {
+  if (!isRecord(body) || !hasOnlyKeys(body, ["returnUrl", "refreshUrl"])) {
+    throw new ApiError(400, "invalid-argument", "The Connect request contains unsupported fields.");
+  }
+  return {
+    returnUrl: validateAllowedHttpsUrl(body.returnUrl, "returnUrl"),
+    refreshUrl: validateAllowedHttpsUrl(body.refreshUrl, "refreshUrl"),
+  };
+}
+
+function validateAllowedHttpsUrl(value: unknown, field: string): string {
+  const raw = requiredString(value, field, 2_048);
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new ApiError(400, "invalid-argument", `${field} must be a valid HTTPS URL.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new ApiError(400, "invalid-argument", `${field} must use HTTPS.`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const allowed =
+    host === "vaultables.com" ||
+    host.endsWith(".vaultables.com") ||
+    host === "api.vaultables.com";
+  if (!allowed) {
+    throw new ApiError(400, "invalid-argument", `${field} host is not allowlisted.`);
+  }
+  return parsed.toString();
+}

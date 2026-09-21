@@ -17,6 +17,7 @@ import { analyzeCard } from "./providers.js";
 import { appCheckMiddleware } from "./appcheck.js";
 import {
   ApiError,
+  validateConnectUrls,
   validateDispute,
   validateEscrowId,
   validateIdempotencyKey,
@@ -800,6 +801,101 @@ async function openDispute(uid: string, escrowId: string, body: unknown): Promis
   });
 }
 
+
+async function createConnectAccountLink(uid: string, body: unknown): Promise<RecordValue> {
+  const urls = validateConnectUrls(body);
+  const payoutRef = db.collection("users").doc(uid).collection("private").doc("payout");
+  const existing = await payoutRef.get();
+  let accountId = existing.exists
+    ? stringField(asRecord(existing.data()), "stripeConnectedAccountId")
+    : undefined;
+
+  const stripe = stripeClient();
+  if (!accountId || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    let account: Stripe.Account;
+    try {
+      account = await stripe.accounts.create({
+        type: "express",
+        capabilities: {
+          transfers: { requested: true },
+        },
+        metadata: { firebaseUid: uid },
+      });
+    } catch (error) {
+      logger.warn("Stripe Connect account creation failed", {
+        errorType: error instanceof Error ? error.name : "unknown",
+      });
+      throw new ApiError(502, "payment-provider-error", "The payout account could not be created.");
+    }
+    accountId = account.id;
+    await payoutRef.set(
+      {
+        stripeConnectedAccountId: accountId,
+        provider: "stripe",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
+  let accountLink: Stripe.AccountLink;
+  try {
+    accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: urls.refreshUrl,
+      return_url: urls.returnUrl,
+      type: "account_onboarding",
+    });
+  } catch (error) {
+    logger.warn("Stripe Connect account link creation failed", {
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
+    throw new ApiError(502, "payment-provider-error", "The payout onboarding link could not be created.");
+  }
+
+  return {
+    accountId,
+    url: accountLink.url,
+    expiresAt: accountLink.expires_at,
+  };
+}
+
+async function getConnectStatus(uid: string): Promise<RecordValue> {
+  const payoutRef = db.collection("users").doc(uid).collection("private").doc("payout");
+  const existing = await payoutRef.get();
+  const accountId = existing.exists
+    ? stringField(asRecord(existing.data()), "stripeConnectedAccountId")
+    : undefined;
+  if (!accountId || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    return {
+      connected: false,
+      detailsSubmitted: false,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+    };
+  }
+
+  try {
+    const account = await stripeClient().accounts.retrieve(accountId);
+    const chargesEnabled = Boolean(account.charges_enabled);
+    const payoutsEnabled = Boolean(account.payouts_enabled);
+    const detailsSubmitted = Boolean(account.details_submitted);
+    return {
+      connected: chargesEnabled && payoutsEnabled,
+      accountId,
+      detailsSubmitted,
+      chargesEnabled,
+      payoutsEnabled,
+    };
+  } catch (error) {
+    logger.warn("Stripe Connect account retrieve failed", {
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
+    throw new ApiError(502, "payment-provider-error", "The payout account status could not be loaded.");
+  }
+}
+
 type ProtectedHandler = (request: Request, response: Response, user: DecodedIdToken) => Promise<void>;
 
 const app = express();
@@ -847,6 +943,18 @@ protectedPost("/api/v1/escrow/:escrowId/disputes", async (request, response, use
   const result = await openDispute(user.uid, validateEscrowId(request.params.escrowId), request.body);
   response.status(201).json(result);
 });
+
+
+protectedPost("/api/v1/connect/account-link", async (request, response, user) => {
+  const result = await createConnectAccountLink(user.uid, request.body);
+  response.status(200).json(result);
+});
+
+protectedPost("/api/v1/connect/status", async (_request, response, user) => {
+  const result = await getConnectStatus(user.uid);
+  response.status(200).json(result);
+});
+
 
 app.use((_request, _response, next) => {
   next(new ApiError(404, "not-found", "Endpoint not found."));

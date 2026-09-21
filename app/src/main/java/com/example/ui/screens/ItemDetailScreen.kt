@@ -35,14 +35,24 @@ import com.example.ui.theme.GoldAccent
 fun ItemDetailScreen(
     item: CollectibleItem,
     formattedPrice: String,
+    sellerConnectConnected: Boolean = false,
+    sellerConnectWarning: String? = null,
     onBack: () -> Unit,
     onBuyEscrow: (CollectibleItem) -> Unit,
+    onListForSale: (CollectibleItem, Double) -> Unit = { _, _ -> },
+    onUnlist: (CollectibleItem) -> Unit = {},
+    onStartSellerConnect: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showDigitalCertDialog by remember { mutableStateOf(false) }
     var showTradeOfferModal by remember { mutableStateOf(false) }
     var tradeCashAmount by remember { mutableStateOf("") }
     var offerSubmitted by remember { mutableStateOf(false) }
+    var listPriceInput by remember {
+        mutableStateOf(
+            (if (item.salePriceUsd > 0) item.salePriceUsd else item.estimatedValueUsd).toString()
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -87,13 +97,26 @@ fun ItemDetailScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { showTradeOfferModal = true },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = "Trade", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Propose Trade", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        if (item.isListedForSale) {
+                            OutlinedButton(
+                                onClick = { onUnlist(item) },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("detail_unlist_button")
+                            ) {
+                                Text("Unlist", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    val price = listPriceInput.toDoubleOrNull()
+                                        ?: item.estimatedValueUsd
+                                    onListForSale(item, price)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("detail_list_for_sale_button")
+                            ) {
+                                Text("List for Sale", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
 
                         Button(
@@ -119,6 +142,53 @@ fun ItemDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            if (!sellerConnectConnected) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .testTag("seller_connect_warning_card"),
+                    colors = CardDefaults.cardColors(containerColor = GoldAccent.copy(alpha = 0.15f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = sellerConnectWarning
+                                ?: "Connect Stripe payouts before listing so escrow release is not blocked.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = onStartSellerConnect,
+                            colors = ButtonDefaults.buttonColors(containerColor = BlueEscrow),
+                            modifier = Modifier.testTag("detail_connect_stripe_button")
+                        ) {
+                            Text("Connect Stripe Payouts", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            if (!item.isListedForSale) {
+                OutlinedTextField(
+                    value = listPriceInput,
+                    onValueChange = { listPriceInput = it },
+                    label = { Text("List price (USD)") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .testTag("detail_list_price_field")
+                )
+            } else if (item.marketplaceListingId.isNotBlank()) {
+                Text(
+                    text = "Listed as ${item.marketplaceListingId}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+
             // Visual Hero Canvas
             Box(
                 modifier = Modifier

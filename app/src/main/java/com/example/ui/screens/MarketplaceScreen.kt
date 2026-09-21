@@ -89,7 +89,7 @@ fun MarketplaceScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Beta catalog • Payments and escrow are not live",
+                        text = "Live listings • Stripe test-mode escrow via server webhooks",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

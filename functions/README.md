@@ -101,6 +101,43 @@ private payment attempt and a server-only per-listing payment lock; it never
 creates an escrow. Only a verified
 `payment_intent.succeeded` webhook creates the paid escrow.
 
+
+### `POST /api/v1/connect/account-link`
+
+Seller-only Stripe Connect Express onboarding. Body:
+
+```json
+{
+  "returnUrl": "https://vaultables.com/connect/return",
+  "refreshUrl": "https://vaultables.com/connect/refresh"
+}
+```
+
+Only `https` URLs on `vaultables.com` (and subdomains) are accepted. The server
+creates an Express account when missing, stores
+`users/{uid}/private/payout.stripeConnectedAccountId`, and returns:
+
+```json
+{"accountId":"acct_...","url":"https://connect.stripe.com/...","expiresAt":1710000000}
+```
+
+### `POST /api/v1/connect/status`
+
+Empty JSON object body. Returns whether the caller's Connect payout account can
+receive transfers:
+
+```json
+{
+  "connected": false,
+  "detailsSubmitted": false,
+  "chargesEnabled": false,
+  "payoutsEnabled": false
+}
+```
+
+When an account exists, `accountId` is included. Missing payout configuration
+blocks escrow release with an explicit `payoutNotice`.
+
 ### Escrow endpoints and policy
 
 * `POST /api/v1/escrow/{escrowId}/ship` is seller-only and accepts

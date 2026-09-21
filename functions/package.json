@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test lib/**/*.test.js",
+    "test": "npm run build && node --test lib/appcheck.test.js lib/providers.test.js lib/validation.test.js",
     "serve": "npm run build && firebase emulators:start --only functions,firestore"
   },
   "dependencies": {

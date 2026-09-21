@@ -40,8 +40,12 @@ fun ProfileHubScreen(
     onSelectCurrency: (CurrencyCode) -> Unit,
     onExportReport: () -> Unit,
     onViewShippingLabel: (EscrowTransaction) -> Unit,
-    onConfirmBuyer: (Long) -> Unit,
-    onConfirmSeller: (Long) -> Unit,
+    sellerConnectConnected: Boolean = false,
+    sellerConnectWarning: String? = null,
+    onConfirmBuyer: (EscrowTransaction) -> Unit,
+    onShipSeller: (EscrowTransaction) -> Unit,
+    onOpenDispute: (EscrowTransaction) -> Unit = {},
+    onStartSellerConnect: () -> Unit = {},
     onOpenAuthModal: () -> Unit = {},
     onOpenReferralModal: () -> Unit = {},
     onExportCsv: () -> Unit = {},
@@ -414,10 +418,12 @@ fun ProfileHubScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Payout button
+                        // Stripe Connect payout setup
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = EmeraldVerified.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("stripe_connect_card"),
+                            color = if (sellerConnectConnected) EmeraldVerified.copy(alpha = 0.12f) else GoldAccent.copy(alpha = 0.12f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Row(
@@ -427,17 +433,31 @@ fun ProfileHubScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text(text = "$258.00 Available to Withdraw", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EmeraldVerified)
-                                    Text(text = "Direct payout via Bank / Stripe Escrow", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (sellerConnectConnected) "Stripe Connect linked" else "Stripe Connect required for payouts",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (sellerConnectConnected) EmeraldVerified else GoldAccent
+                                    )
+                                    Text(
+                                        text = sellerConnectWarning
+                                            ?: if (sellerConnectConnected) "Escrow releases can transfer to your connected account."
+                                            else "Without Connect, buyer confirmation leaves funds held (release blocked).",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                Button(
-                                    onClick = { },
-                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldVerified),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Payout", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                if (!sellerConnectConnected) {
+                                    Button(
+                                        onClick = onStartSellerConnect,
+                                        colors = ButtonDefaults.buttonColors(containerColor = BlueEscrow),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.testTag("stripe_connect_button")
+                                    ) {
+                                        Text("Connect", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -528,7 +548,7 @@ fun ProfileHubScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "ESCROW #${escrow.id}",
+                                    text = if (escrow.serverEscrowId.isNotBlank()) "ESCROW ${escrow.serverEscrowId.take(12)}" else "ESCROW #${escrow.id}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = BlueEscrow
@@ -559,6 +579,31 @@ fun ProfileHubScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
+                            Text(
+                                text = "State: ${escrow.status} • Release: ${escrow.releaseStatus}",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (escrow.payoutNotice.isNotBlank()) {
+                                Text(
+                                    text = escrow.payoutNotice,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldAccent
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedButton(
+                                onClick = { onOpenDispute(escrow) },
+                                enabled = !isReleased && escrow.serverEscrowId.isNotBlank(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("dispute_btn_${escrow.id}")
+                            ) {
+                                Text("Open Dispute", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+
                             // Dual Confirmation Row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -566,8 +611,8 @@ fun ProfileHubScreen(
                             ) {
                                 // Buyer Confirmation Button
                                 Button(
-                                    onClick = { onConfirmBuyer(escrow.id) },
-                                    enabled = !escrow.buyerConfirmed && !isReleased,
+                                    onClick = { onConfirmBuyer(escrow) },
+                                    enabled = !escrow.buyerConfirmed && !isReleased && escrow.serverEscrowId.isNotBlank(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = if (escrow.buyerConfirmed) EmeraldVerified else BlueEscrow
                                     ),
@@ -583,7 +628,7 @@ fun ProfileHubScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (escrow.buyerConfirmed) "Buyer OK ✓" else "Buyer Confirm",
+                                        text = if (escrow.buyerConfirmed) "Receipt OK ✓" else "Confirm Receipt",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -591,8 +636,8 @@ fun ProfileHubScreen(
 
                                 // Seller Confirmation Button
                                 Button(
-                                    onClick = { onConfirmSeller(escrow.id) },
-                                    enabled = !escrow.sellerConfirmed && !isReleased,
+                                    onClick = { onShipSeller(escrow) },
+                                    enabled = !escrow.sellerConfirmed && !isReleased && escrow.serverEscrowId.isNotBlank(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = if (escrow.sellerConfirmed) EmeraldVerified else GoldAccent
                                     ),
@@ -608,7 +653,7 @@ fun ProfileHubScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (escrow.sellerConfirmed) "Seller OK ✓" else "Seller Confirm",
+                                        text = if (escrow.sellerConfirmed) "Shipped ✓" else "Mark Shipped",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (escrow.sellerConfirmed) Color.White else Color.Black
