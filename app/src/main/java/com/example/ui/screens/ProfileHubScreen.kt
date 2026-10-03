@@ -609,10 +609,14 @@ fun ProfileHubScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Buyer Confirmation Button
+                                // Buyer Confirmation Button. Stays available as "Retry Release" when the
+                                // server held the payout (seller not payout-ready / transfer failed):
+                                // confirm-receipt is idempotent and re-runs prepareRelease server-side.
+                                val canRetryRelease = escrow.buyerConfirmed && !isReleased &&
+                                    escrow.releaseStatus in setOf("blocked", "release_failed")
                                 Button(
                                     onClick = { onConfirmBuyer(escrow) },
-                                    enabled = !escrow.buyerConfirmed && !isReleased && escrow.serverEscrowId.isNotBlank(),
+                                    enabled = (!escrow.buyerConfirmed || canRetryRelease) && !isReleased && escrow.serverEscrowId.isNotBlank(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = if (escrow.buyerConfirmed) EmeraldVerified else BlueEscrow
                                     ),
@@ -628,7 +632,11 @@ fun ProfileHubScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (escrow.buyerConfirmed) "Receipt OK ✓" else "Confirm Receipt",
+                                        text = when {
+                                            canRetryRelease -> "Retry Release"
+                                            escrow.buyerConfirmed -> "Receipt OK ✓"
+                                            else -> "Confirm Receipt"
+                                        },
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )

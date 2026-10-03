@@ -37,6 +37,8 @@ fun ItemDetailScreen(
     formattedPrice: String,
     sellerConnectConnected: Boolean = false,
     sellerConnectWarning: String? = null,
+    /** True only when the item is in the signed-in user's own vault (seller controls). */
+    isOwner: Boolean = true,
     onBack: () -> Unit,
     onBuyEscrow: (CollectibleItem) -> Unit,
     onListForSale: (CollectibleItem, Double) -> Unit = { _, _ -> },
@@ -97,7 +99,8 @@ fun ItemDetailScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (item.isListedForSale) {
+                        // Seller-only controls: buyers viewing someone else's listing see none.
+                        if (isOwner && item.isListedForSale) {
                             OutlinedButton(
                                 onClick = { onUnlist(item) },
                                 shape = RoundedCornerShape(12.dp),
@@ -105,7 +108,7 @@ fun ItemDetailScreen(
                             ) {
                                 Text("Unlist", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
-                        } else {
+                        } else if (isOwner) {
                             OutlinedButton(
                                 onClick = {
                                     val price = listPriceInput.toDoubleOrNull()
@@ -142,7 +145,7 @@ fun ItemDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            if (!sellerConnectConnected) {
+            if (isOwner && !sellerConnectConnected) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -169,7 +172,7 @@ fun ItemDetailScreen(
                 }
             }
 
-            if (!item.isListedForSale) {
+            if (isOwner && !item.isListedForSale) {
                 OutlinedTextField(
                     value = listPriceInput,
                     onValueChange = { listPriceInput = it },

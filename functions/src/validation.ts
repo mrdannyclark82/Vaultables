@@ -140,10 +140,16 @@ export function validateShipping(body: unknown): { carrier: string; trackingNumb
   if (!isRecord(body) || !hasOnlyKeys(body, ["carrier", "trackingNumber"])) {
     throw new ApiError(400, "invalid-argument", "The shipping request contains unsupported fields.");
   }
-  return {
-    carrier: requiredString(body.carrier, "carrier", 64),
-    trackingNumber: requiredString(body.trackingNumber, "trackingNumber", 128),
-  };
+  const carrier = requiredString(body.carrier, "carrier", 64);
+  const trackingNumber = requiredString(body.trackingNumber, "trackingNumber", 64).trim();
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9 -]{3,63}$/.test(trackingNumber)
+    || /pending|placeholder/i.test(trackingNumber)
+    || /^TRK-VAULT/i.test(trackingNumber)
+  ) {
+    throw new ApiError(400, "invalid-argument", "trackingNumber must be a real carrier tracking number.");
+  }
+  return { carrier, trackingNumber };
 }
 
 export function validateDispute(body: unknown): { reason: string; details?: string } {

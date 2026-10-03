@@ -59,6 +59,8 @@ test("accepts escrow ids and shipping payloads", () => {
     { carrier: "UPS", trackingNumber: "1Z999" },
   );
   assert.throws(() => validateShipping({ carrier: "UPS" }), ApiError);
+  assert.throws(() => validateShipping({ carrier: "UPS", trackingNumber: "TRK-VAULT-PENDING" }), ApiError);
+  assert.throws(() => validateShipping({ carrier: "UPS", trackingNumber: "x" }), ApiError);
 });
 
 test("accepts supported dispute reasons only", () => {

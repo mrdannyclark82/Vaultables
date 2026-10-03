@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
@@ -158,14 +159,16 @@ object FirestoreSyncManager {
                 snap.reference.delete().await()
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Unlist notice: ${e.message}")
+            Log.d(TAG, "Unlist failed: ${e.message}")
+            throw IllegalStateException("Could not remove the marketplace listing. Try again.", e)
         }
     }
 
-    fun observePublicListings(context: Context? = null): Flow<List<CollectibleItem>> = callbackFlow {
+    /** Emits null when the live feed is unavailable (no Firestore / listener error). */
+    fun observePublicListings(context: Context? = null): Flow<List<CollectibleItem>?> = callbackFlow {
         val fs = getFirestoreInstance(context)
         if (fs == null) {
-            trySend(emptyList())
+            trySend(null)
             close()
             return@callbackFlow
         }
@@ -175,7 +178,7 @@ object FirestoreSyncManager {
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.d(TAG, "Marketplace listen notice: ${error.message}")
-                    trySend(emptyList())
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 val listings = snapshot?.documents?.mapNotNull { doc ->
@@ -206,6 +209,24 @@ object FirestoreSyncManager {
             }
         awaitClose { registration.remove() }
     }
+
+    /** Emits the signed-in Firebase uid (or null) now and on every sign-in / sign-out. */
+    fun observeAuthUid(): Flow<String?> = callbackFlow {
+        val auth = try {
+            FirebaseAuth.getInstance()
+        } catch (e: Exception) {
+            Log.d(TAG, "Auth unavailable: ${e.message}")
+            null
+        }
+        if (auth == null) {
+            trySend(null)
+            close()
+            return@callbackFlow
+        }
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.uid) }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
 
     fun observeParticipantEscrows(context: Context? = null): Flow<List<EscrowTransaction>> = callbackFlow {
         val fs = getFirestoreInstance(context)

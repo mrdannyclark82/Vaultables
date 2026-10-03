@@ -581,8 +581,37 @@ type ReleasePreparation =
   | { kind: "blocked"; escrow: Escrow }
   | { kind: "ready"; escrow: Escrow; stripeConnectedAccountId: string };
 
+const CONNECT_ACCOUNT_ID = /^acct_[A-Za-z0-9]+$/;
+
+/** A Connect account can receive escrow releases only once Stripe has enabled transfers + payouts. */
+function isPayoutReady(account: Stripe.Account): boolean {
+  return account.capabilities?.transfers === "active" && Boolean(account.payouts_enabled);
+}
+
+/** Returns the seller's acct_ id only if Stripe reports it payout-ready; never throws. */
+async function payoutReadyAccountId(sellerId: string): Promise<string | undefined> {
+  const payout = await db.collection("users").doc(sellerId).collection("private").doc("payout").get();
+  const accountId = payout.exists ? stringField(asRecord(payout.data()), "stripeConnectedAccountId") : undefined;
+  if (!accountId || !CONNECT_ACCOUNT_ID.test(accountId)) {
+    return undefined;
+  }
+  try {
+    return isPayoutReady(await stripeClient().accounts.retrieve(accountId)) ? accountId : undefined;
+  } catch (error) {
+    logger.warn("Stripe Connect readiness check failed", {
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
+    return undefined;
+  }
+}
+
 async function prepareRelease(escrowId: string): Promise<ReleasePreparation> {
   const escrowRef = db.collection("escrows").doc(escrowId);
+  // Stripe calls must not run inside a Firestore transaction (it may retry), so check
+  // seller payout readiness up front. sellerId is immutable on an escrow.
+  const preSnapshot = await escrowRef.get();
+  const preSellerId = preSnapshot.exists ? stringField(asRecord(preSnapshot.data()), "sellerId") : undefined;
+  const readyAccountId = preSellerId ? await payoutReadyAccountId(preSellerId) : undefined;
   return db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(escrowRef);
     if (!snapshot.exists) {
@@ -600,10 +629,8 @@ async function prepareRelease(escrowId: string): Promise<ReleasePreparation> {
     ) {
       return { kind: "not-ready", escrow };
     }
-    const payoutRef = db.collection("users").doc(escrow.sellerId).collection("private").doc("payout");
-    const payout = await transaction.get(payoutRef);
-    const stripeConnectedAccountId = payout.exists ? stringField(asRecord(payout.data()), "stripeConnectedAccountId") : undefined;
-    if (!stripeConnectedAccountId || !/^acct_[A-Za-z0-9]+$/.test(stripeConnectedAccountId)) {
+    const stripeConnectedAccountId = escrow.sellerId === preSellerId ? readyAccountId : undefined;
+    if (!stripeConnectedAccountId) {
       if (escrow.state === "inspection" && escrow.releaseStatus !== "blocked") {
         transaction.update(escrowRef, {
           releaseStatus: "blocked",
@@ -814,29 +841,46 @@ async function createConnectAccountLink(uid: string, body: unknown): Promise<Rec
   if (!accountId || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
     let account: Stripe.Account;
     try {
-      account = await stripe.accounts.create({
-        type: "express",
-        capabilities: {
-          transfers: { requested: true },
+      account = await stripe.accounts.create(
+        {
+          type: "express",
+          capabilities: {
+            transfers: { requested: true },
+          },
+          metadata: { firebaseUid: uid },
         },
-        metadata: { firebaseUid: uid },
-      });
+        // Concurrent/retried onboarding requests for the same user get the same account.
+        { idempotencyKey: `vaultables-connect-account-${uid}` },
+      );
     } catch (error) {
       logger.warn("Stripe Connect account creation failed", {
         errorType: error instanceof Error ? error.name : "unknown",
       });
       throw new ApiError(502, "payment-provider-error", "The payout account could not be created.");
     }
-    accountId = account.id;
-    await payoutRef.set(
-      {
-        stripeConnectedAccountId: accountId,
-        provider: "stripe",
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    const createdId = account.id;
+    // First writer wins: if another request already stored an account, use that one so the
+    // returned onboarding link always points at the account persisted for this user.
+    accountId = await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(payoutRef);
+      const storedId = current.exists
+        ? stringField(asRecord(current.data()), "stripeConnectedAccountId")
+        : undefined;
+      if (storedId && CONNECT_ACCOUNT_ID.test(storedId)) {
+        return storedId;
+      }
+      transaction.set(
+        payoutRef,
+        {
+          stripeConnectedAccountId: createdId,
+          provider: "stripe",
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return createdId;
+    });
   }
 
   let accountLink: Stripe.AccountLink;
@@ -882,7 +926,9 @@ async function getConnectStatus(uid: string): Promise<RecordValue> {
     const payoutsEnabled = Boolean(account.payouts_enabled);
     const detailsSubmitted = Boolean(account.details_submitted);
     return {
-      connected: chargesEnabled && payoutsEnabled,
+      // Accounts are created with only the `transfers` capability, so charges_enabled is not
+      // required; use the same readiness rule as prepareRelease.
+      connected: isPayoutReady(account),
       accountId,
       detailsSubmitted,
       chargesEnabled,

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.VaultRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -48,6 +49,7 @@ data class VaultUiState(
     val connectOnboardingUrl: String? = null
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
@@ -87,11 +89,18 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            repository.observeCloudEscrows().collect { escrows ->
-                repository.publishCloudEscrows(escrows)
-            }
+            // Re-subscribe the participant escrow listener on every auth change: a guest who
+            // signs in later must start receiving their server escrows without an app restart.
+            repository.observeAuthUid()
+                .flatMapLatest { uid ->
+                    if (uid == null) flowOf(emptyList()) else repository.observeCloudEscrows()
+                }
+                .collect { escrows -> repository.publishCloudEscrows(escrows) }
         }
-        refreshConnectStatus()
+        viewModelScope.launch {
+            // Connect status is per-user too; refresh it whenever the signed-in user changes.
+            repository.observeAuthUid().collect { refreshConnectStatus() }
+        }
     }
 
     fun setShowAuthModal(show: Boolean) {

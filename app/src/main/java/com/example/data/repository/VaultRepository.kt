@@ -30,15 +30,19 @@ class VaultRepository(
 ) {
 
     val allItems: Flow<List<CollectibleItem>> = db.collectibleDao().getAllItems()
-    private val cloudMarketplace = MutableStateFlow<List<CollectibleItem>>(emptyList())
+    /** null = cloud feed not loaded yet or unavailable; an empty list is a valid live result. */
+    private val cloudMarketplace = MutableStateFlow<List<CollectibleItem>?>(null)
     private val cloudEscrows = MutableStateFlow<List<EscrowTransaction>>(emptyList())
 
-    /** Prefer live Firestore marketplaceListings; fall back to local listed Room rows. */
+    /**
+     * Live Firestore marketplaceListings are authoritative once loaded (including an empty
+     * result). Local listed Room rows are only shown while the cloud feed is unavailable.
+     */
     val marketplaceListings: Flow<List<CollectibleItem>> = combine(
         cloudMarketplace,
         db.collectibleDao().getMarketplaceListings()
     ) { cloud, local ->
-        if (cloud.isNotEmpty()) cloud else local
+        cloud ?: local
     }
 
     /** Prefer server escrow documents for the signed-in participant. */
@@ -57,13 +61,15 @@ class VaultRepository(
         // Hot flows are collected from the ViewModel scope.
     }
 
-    fun observeCloudMarketplace(): Flow<List<CollectibleItem>> =
+    fun observeCloudMarketplace(): Flow<List<CollectibleItem>?> =
         FirestoreSyncManager.observePublicListings(appContext)
 
     fun observeCloudEscrows(): Flow<List<EscrowTransaction>> =
         FirestoreSyncManager.observeParticipantEscrows(appContext)
 
-    suspend fun publishCloudMarketplace(listings: List<CollectibleItem>) {
+    fun observeAuthUid(): Flow<String?> = FirestoreSyncManager.observeAuthUid()
+
+    suspend fun publishCloudMarketplace(listings: List<CollectibleItem>?) {
         cloudMarketplace.value = listings
     }
 
@@ -570,8 +576,12 @@ class VaultRepository(
     }
 
     suspend fun unlistItem(item: CollectibleItem): CollectibleItem {
-        FirestoreSyncManager.unpublishListing(item, appContext)
-        val saved = item.copy(isListedForSale = false, salePriceUsd = 0.0)
+        // Cloud listings carry the *seller's* Room id; never write them into this user's Room.
+        val local = db.collectibleDao().getItemById(item.id)
+            ?.takeIf { it.vaultHashId == item.vaultHashId }
+            ?: throw IllegalStateException("Only the seller can unlist this item.")
+        FirestoreSyncManager.unpublishListing(local, appContext) // throws if the cloud delete fails
+        val saved = local.copy(isListedForSale = false, salePriceUsd = 0.0)
         db.collectibleDao().updateItem(saved)
         FirestoreSyncManager.syncCollectibleToCloud(saved, appContext)
         return saved

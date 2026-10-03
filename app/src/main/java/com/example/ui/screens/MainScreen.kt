@@ -44,6 +44,7 @@ fun MainScreen(
     val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
     val allAlerts by viewModel.allAlerts.collectAsStateWithLifecycle()
     val allReviews by viewModel.allReviews.collectAsStateWithLifecycle()
+    var shipEscrowTarget by remember { mutableStateOf<com.example.data.model.EscrowTransaction?>(null) }
 
     val unreadAlertsCount = allAlerts.count { !it.isRead }
     val paymentSheet = rememberPaymentSheet(
@@ -104,11 +105,15 @@ fun MainScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.selectedItemForDetail != null) {
+            val detailItem = uiState.selectedItemForDetail!!
             ItemDetailScreen(
-                item = uiState.selectedItemForDetail!!,
-                formattedPrice = viewModel.formatPrice(uiState.selectedItemForDetail!!.estimatedValueUsd),
+                item = detailItem,
+                formattedPrice = viewModel.formatPrice(detailItem.estimatedValueUsd),
                 sellerConnectConnected = uiState.sellerConnectConnected,
                 sellerConnectWarning = uiState.sellerConnectWarning,
+                isOwner = allItems.any {
+                    it.id == detailItem.id && it.vaultHashId == detailItem.vaultHashId
+                },
                 onBack = { viewModel.selectItemForDetail(null) },
                 onBuyEscrow = {
                     viewModel.setShowEscrowDialog(true)
@@ -320,12 +325,8 @@ fun MainScreen(
                         onExportReport = { viewModel.setShowActivityReportDialog(true) },
                         onViewShippingLabel = { viewModel.setShowShippingLabelDialog(true, it) },
                         onConfirmBuyer = { viewModel.confirmEscrowBuyer(it) },
-                        onShipSeller = { escrow ->
-                            val carrier = escrow.shippingCarrier.ifBlank { "UPS" }
-                            val tracking = escrow.trackingNumber.ifBlank { "TRK-VAULT-PENDING" }
-                            viewModel.shipEscrowAsSeller(escrow, carrier, tracking)
-                            viewModel.setShowShippingLabelDialog(true, escrow)
-                        },
+                        // Collect real carrier/tracking first; never send a placeholder to the server.
+                        onShipSeller = { escrow -> shipEscrowTarget = escrow },
                         onOpenDispute = { viewModel.openEscrowDispute(it) },
                         onStartSellerConnect = { viewModel.startSellerConnectOnboarding() },
                         onOpenAuthModal = { viewModel.setShowAuthModal(true) },
@@ -394,6 +395,17 @@ fun MainScreen(
                     viewModel.createEscrowTrade(item, buyer, feePct)
                 },
                 formatPrice = { viewModel.formatPrice(it) }
+            )
+        }
+
+        shipEscrowTarget?.let { escrow ->
+            ShipEscrowDialog(
+                escrow = escrow,
+                onConfirm = { carrier, tracking ->
+                    shipEscrowTarget = null
+                    viewModel.shipEscrowAsSeller(escrow, carrier, tracking)
+                },
+                onDismiss = { shipEscrowTarget = null }
             )
         }
 
