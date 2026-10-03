@@ -25,9 +25,10 @@ import com.stripe.android.paymentsheet.PaymentSheet
 import com.stripe.android.paymentsheet.PaymentSheetResult
 import com.stripe.android.paymentsheet.rememberPaymentSheet
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 
-import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +44,7 @@ fun MainScreen(
     val allMessages by viewModel.allMessages.collectAsStateWithLifecycle()
     val allAlerts by viewModel.allAlerts.collectAsStateWithLifecycle()
     val allReviews by viewModel.allReviews.collectAsStateWithLifecycle()
+    var shipEscrowTarget by remember { mutableStateOf<com.example.data.model.EscrowTransaction?>(null) }
 
     val unreadAlertsCount = allAlerts.count { !it.isRead }
     val paymentSheet = rememberPaymentSheet(
@@ -85,16 +87,40 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(uiState.connectOnboardingUrl) {
+        uiState.connectOnboardingUrl?.let { url ->
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            viewModel.clearConnectOnboardingUrl()
+            viewModel.refreshConnectStatus()
+        }
+    }
+
+    LaunchedEffect(uiState.scanStatusMessage) {
+        val message = uiState.scanStatusMessage
+        if (message.isNotBlank() && !uiState.isScanningInProgress) {
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     Box(modifier = modifier.fillMaxSize()) {
         if (uiState.selectedItemForDetail != null) {
+            val detailItem = uiState.selectedItemForDetail!!
             ItemDetailScreen(
-                item = uiState.selectedItemForDetail!!,
-                formattedPrice = viewModel.formatPrice(uiState.selectedItemForDetail!!.estimatedValueUsd),
+                item = detailItem,
+                formattedPrice = viewModel.formatPrice(detailItem.estimatedValueUsd),
+                sellerConnectConnected = uiState.sellerConnectConnected,
+                sellerConnectWarning = uiState.sellerConnectWarning,
+                isOwner = allItems.any {
+                    it.id == detailItem.id && it.vaultHashId == detailItem.vaultHashId
+                },
                 onBack = { viewModel.selectItemForDetail(null) },
                 onBuyEscrow = {
                     viewModel.setShowEscrowDialog(true)
-                }
+                },
+                onListForSale = { item, price -> viewModel.listItemForSale(item, price) },
+                onUnlist = { item -> viewModel.unlistItem(item) },
+                onStartSellerConnect = { viewModel.startSellerConnectOnboarding() }
             )
         } else {
             Scaffold(
@@ -291,13 +317,18 @@ fun MainScreen(
                         selectedCurrency = uiState.selectedCurrency,
                         escrows = allEscrows,
                         currentUser = uiState.currentUser,
+                        sellerConnectConnected = uiState.sellerConnectConnected,
+                        sellerConnectWarning = uiState.sellerConnectWarning,
                         onToggleDarkMode = { viewModel.toggleDarkMode() },
                         onToggleBiometric = { viewModel.toggleBiometricLock(it) },
                         onSelectCurrency = { viewModel.selectCurrency(it) },
                         onExportReport = { viewModel.setShowActivityReportDialog(true) },
                         onViewShippingLabel = { viewModel.setShowShippingLabelDialog(true, it) },
                         onConfirmBuyer = { viewModel.confirmEscrowBuyer(it) },
-                        onConfirmSeller = { viewModel.confirmEscrowSeller(it) },
+                        // Collect real carrier/tracking first; never send a placeholder to the server.
+                        onShipSeller = { escrow -> shipEscrowTarget = escrow },
+                        onOpenDispute = { viewModel.openEscrowDispute(it) },
+                        onStartSellerConnect = { viewModel.startSellerConnectOnboarding() },
                         onOpenAuthModal = { viewModel.setShowAuthModal(true) },
                         onOpenReferralModal = { viewModel.setShowReferralModal(true) },
                         onExportCsv = { viewModel.exportPortfolioCsv(context) },
@@ -364,6 +395,17 @@ fun MainScreen(
                     viewModel.createEscrowTrade(item, buyer, feePct)
                 },
                 formatPrice = { viewModel.formatPrice(it) }
+            )
+        }
+
+        shipEscrowTarget?.let { escrow ->
+            ShipEscrowDialog(
+                escrow = escrow,
+                onConfirm = { carrier, tracking ->
+                    shipEscrowTarget = null
+                    viewModel.shipEscrowAsSeller(escrow, carrier, tracking)
+                },
+                onDismiss = { shipEscrowTarget = null }
             )
         }
 

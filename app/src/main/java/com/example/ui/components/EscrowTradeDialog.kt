@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,8 +37,10 @@ fun EscrowTradeDialog(
     var buyerNameInput by remember { mutableStateOf("") }
     var selectedFeePct by remember { mutableStateOf(3.5) }
 
-    val platformFeeUsd = item.estimatedValueUsd * (selectedFeePct / 100.0)
-    val totalAmountUsd = item.estimatedValueUsd + platformFeeUsd
+    val itemPriceUsd = if (item.salePriceUsd > 0) item.salePriceUsd else item.estimatedValueUsd
+    val platformFeeUsd = itemPriceUsd * (selectedFeePct / 100.0)
+    // Server charges listing priceMinor only; fee line is informational for the buyer.
+    val totalAmountUsd = itemPriceUsd
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -57,7 +58,7 @@ fun EscrowTradeDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Escrow is not live. No card will be charged. This screen is a preview of the future checkout flow.",
+                    text = "Stripe test-mode escrow. Funds are held by the server until the seller ships and you confirm receipt.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -97,7 +98,7 @@ fun EscrowTradeDialog(
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(text = formatPrice(item.estimatedValueUsd), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(text = formatPrice(itemPriceUsd), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))

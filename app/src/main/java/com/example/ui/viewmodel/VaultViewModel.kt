@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
 import com.example.data.repository.VaultRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -41,9 +42,14 @@ data class VaultUiState(
     val pendingScan: ScanDraft? = null,
     val showScanReview: Boolean = false,
     val paymentClientSecret: String? = null,
-    val paymentError: String? = null
+    val paymentError: String? = null,
+    val pendingPaymentListingId: String? = null,
+    val sellerConnectConnected: Boolean = false,
+    val sellerConnectWarning: String? = null,
+    val connectOnboardingUrl: String? = null
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
@@ -76,6 +82,24 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             repository.seedInitialDataIfEmpty()
+        }
+        viewModelScope.launch {
+            repository.observeCloudMarketplace().collect { listings ->
+                repository.publishCloudMarketplace(listings)
+            }
+        }
+        viewModelScope.launch {
+            // Re-subscribe the participant escrow listener on every auth change: a guest who
+            // signs in later must start receiving their server escrows without an app restart.
+            repository.observeAuthUid()
+                .flatMapLatest { uid ->
+                    if (uid == null) flowOf(emptyList()) else repository.observeCloudEscrows()
+                }
+                .collect { escrows -> repository.publishCloudEscrows(escrows) }
+        }
+        viewModelScope.launch {
+            // Connect status is per-user too; refresh it whenever the signed-in user changes.
+            repository.observeAuthUid().collect { refreshConnectStatus() }
         }
     }
 
@@ -248,12 +272,21 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     fun createEscrowTrade(item: CollectibleItem, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
             try {
-                val response = repository.createStripePaymentIntent(item)
-                _uiState.update { it.copy(paymentClientSecret = response.clientSecret, paymentError = null, showEscrowDialog = false) }
+                val (response, listingId) = repository.createStripePaymentIntent(item)
+                _uiState.update {
+                    it.copy(
+                        paymentClientSecret = response.clientSecret,
+                        paymentError = null,
+                        showEscrowDialog = false,
+                        pendingPaymentListingId = listingId
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        paymentError = "Unable to start the secure payment. No escrow was created.",
+                        paymentError = e.message
+                            ?.takeIf { msg -> msg.isNotBlank() }
+                            ?: "Unable to start the secure payment. No escrow was created.",
                         showEscrowDialog = false
                     )
                 }
@@ -263,14 +296,35 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPaymentSheetResult(success: Boolean, item: CollectibleItem?, buyerName: String, feePercentage: Double = 3.5) {
         viewModelScope.launch {
+            val listingId = _uiState.value.pendingPaymentListingId
             _uiState.update { it.copy(paymentClientSecret = null, paymentError = null) }
-            if (success) {
+            if (success && item != null && !listingId.isNullOrBlank()) {
+                repository.createLocalEscrowPlaceholder(
+                    item = item,
+                    buyerName = buyerName,
+                    currencyCode = _uiState.value.selectedCurrency.code,
+                    paymentIntentId = "pending",
+                    listingId = listingId
+                )
                 _uiState.update {
                     it.copy(
                         showEscrowDialog = false,
-                        scanStatusMessage = "Payment submitted. Escrow will appear after verified server confirmation."
+                        scanStatusMessage = "Payment submitted. Waiting for verified webhook escrow…"
                     )
                 }
+                val serverEscrow = repository.waitForServerEscrow(listingId)
+                _uiState.update {
+                    it.copy(
+                        pendingPaymentListingId = null,
+                        scanStatusMessage = if (serverEscrow != null) {
+                            "Escrow ${serverEscrow.serverEscrowId} is active (${serverEscrow.status})."
+                        } else {
+                            "Payment received. Escrow will appear once the Stripe webhook confirms."
+                        }
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(pendingPaymentListingId = null) }
             }
         }
     }
@@ -279,15 +333,111 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(paymentError = null) }
     }
 
-    fun confirmEscrowBuyer(escrowId: Long) {
+    fun confirmEscrowBuyer(escrow: EscrowTransaction) {
         viewModelScope.launch {
-            repository.confirmEscrowBuyer(escrowId)
+            try {
+                repository.confirmEscrowBuyer(escrow)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not confirm receipt on the server.")
+                }
+            }
         }
     }
 
-    fun confirmEscrowSeller(escrowId: Long) {
+    fun shipEscrowAsSeller(escrow: EscrowTransaction, carrier: String, trackingNumber: String) {
         viewModelScope.launch {
-            repository.confirmEscrowSeller(escrowId)
+            try {
+                repository.shipEscrowAsSeller(escrow, carrier, trackingNumber)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not mark shipment on the server.")
+                }
+            }
+        }
+    }
+
+    fun openEscrowDispute(escrow: EscrowTransaction, reason: String = "not_as_described") {
+        viewModelScope.launch {
+            try {
+                repository.openEscrowDispute(escrow, reason)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not open a dispute on the server.")
+                }
+            }
+        }
+    }
+
+    fun refreshConnectStatus() {
+        viewModelScope.launch {
+            try {
+                val status = repository.getConnectStatus()
+                _uiState.update {
+                    it.copy(
+                        sellerConnectConnected = status.connected,
+                        sellerConnectWarning = if (status.connected) null
+                        else "Connect Stripe payouts before listing so escrow release is not blocked."
+                    )
+                }
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(
+                        sellerConnectConnected = false,
+                        sellerConnectWarning = "Connect Stripe payouts before listing so escrow release is not blocked."
+                    )
+                }
+            }
+        }
+    }
+
+    fun startSellerConnectOnboarding() {
+        viewModelScope.launch {
+            try {
+                val url = repository.createConnectOnboardingLink()
+                _uiState.update { it.copy(connectOnboardingUrl = url, paymentError = null) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not start Stripe Connect onboarding.")
+                }
+            }
+        }
+    }
+
+    fun clearConnectOnboardingUrl() {
+        _uiState.update { it.copy(connectOnboardingUrl = null) }
+    }
+
+    fun listItemForSale(item: CollectibleItem, salePriceUsd: Double) {
+        viewModelScope.launch {
+            try {
+                if (!_uiState.value.sellerConnectConnected) {
+                    _uiState.update {
+                        it.copy(
+                            sellerConnectWarning = "Stripe Connect is not linked. You can still list, but release will stay blocked until payouts are connected."
+                        )
+                    }
+                }
+                val saved = repository.listItemForSale(item, salePriceUsd)
+                _uiState.update { it.copy(selectedItemForDetail = saved) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not publish the marketplace listing.")
+                }
+            }
+        }
+    }
+
+    fun unlistItem(item: CollectibleItem) {
+        viewModelScope.launch {
+            try {
+                val saved = repository.unlistItem(item)
+                _uiState.update { it.copy(selectedItemForDetail = saved) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(paymentError = e.message ?: "Could not unlist the item.")
+                }
+            }
         }
     }
 

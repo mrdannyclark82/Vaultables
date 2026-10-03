@@ -3,16 +3,22 @@ package com.example.data.repository
 import android.content.Context
 import com.example.data.db.AppDatabase
 import com.example.data.model.*
+import com.example.data.remote.ConnectAccountLinkRequest
+import com.example.data.remote.EscrowDisputeRequest
+import com.example.data.remote.EscrowPaymentRequest
+import com.example.data.remote.EscrowShipRequest
+import com.example.data.remote.FirebaseAuthTokenProvider
 import com.example.data.remote.FirestoreSyncManager
 import com.example.data.remote.CardScanImage
 import com.example.data.remote.CardScanImages
-import com.example.data.remote.FirebaseAuthTokenProvider
 import com.example.data.remote.NetworkModule
-import com.example.data.remote.EscrowPaymentRequest
 import com.example.data.remote.ScanDraft
 import com.example.data.remote.SecureScannerRequest
 import com.example.data.remote.SecureScanResultParser
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import android.util.Base64
 import java.nio.charset.StandardCharsets
@@ -24,11 +30,73 @@ class VaultRepository(
 ) {
 
     val allItems: Flow<List<CollectibleItem>> = db.collectibleDao().getAllItems()
-    val marketplaceListings: Flow<List<CollectibleItem>> = db.collectibleDao().getMarketplaceListings()
-    val allEscrows: Flow<List<EscrowTransaction>> = db.escrowDao().getAllEscrows()
+    /** null = cloud feed not loaded yet or unavailable; an empty list is a valid live result. */
+    private val cloudMarketplace = MutableStateFlow<List<CollectibleItem>?>(null)
+    private val cloudEscrows = MutableStateFlow<List<EscrowTransaction>>(emptyList())
+
+    /**
+     * Live Firestore marketplaceListings are authoritative once loaded (including an empty
+     * result). Local listed Room rows are only shown while the cloud feed is unavailable.
+     */
+    val marketplaceListings: Flow<List<CollectibleItem>> = combine(
+        cloudMarketplace,
+        db.collectibleDao().getMarketplaceListings()
+    ) { cloud, local ->
+        cloud ?: local
+    }
+
+    /** Prefer server escrow documents for the signed-in participant. */
+    val allEscrows: Flow<List<EscrowTransaction>> = combine(
+        cloudEscrows,
+        db.escrowDao().getAllEscrows()
+    ) { cloud, local ->
+        if (cloud.isNotEmpty()) cloud else local
+    }
+
     val allMessages: Flow<List<ChatMessage>> = db.messageDao().getAllMessages()
     val allAlerts: Flow<List<TradeAlert>> = db.tradeAlertDao().getAllAlerts()
     val allReviews: Flow<List<UserReview>> = db.userReviewDao().getAllReviews()
+
+    fun startCloudListeners() {
+        // Hot flows are collected from the ViewModel scope.
+    }
+
+    fun observeCloudMarketplace(): Flow<List<CollectibleItem>?> =
+        FirestoreSyncManager.observePublicListings(appContext)
+
+    fun observeCloudEscrows(): Flow<List<EscrowTransaction>> =
+        FirestoreSyncManager.observeParticipantEscrows(appContext)
+
+    fun observeAuthUid(): Flow<String?> = FirestoreSyncManager.observeAuthUid()
+
+    suspend fun publishCloudMarketplace(listings: List<CollectibleItem>?) {
+        cloudMarketplace.value = listings
+    }
+
+    suspend fun publishCloudEscrows(escrows: List<EscrowTransaction>) {
+        cloudEscrows.value = escrows
+        escrows.filter { it.serverEscrowId.isNotBlank() }.forEach { remote ->
+            val existing = db.escrowDao().getAllEscrows().first()
+                .firstOrNull { it.serverEscrowId == remote.serverEscrowId }
+            if (existing == null) {
+                db.escrowDao().insertEscrow(remote)
+            } else {
+                db.escrowDao().updateEscrow(
+                    existing.copy(
+                        status = remote.status,
+                        buyerConfirmed = remote.buyerConfirmed,
+                        sellerConfirmed = remote.sellerConfirmed,
+                        trackingNumber = remote.trackingNumber.ifBlank { existing.trackingNumber },
+                        shippingCarrier = remote.shippingCarrier.ifBlank { existing.shippingCarrier },
+                        releaseStatus = remote.releaseStatus,
+                        payoutNotice = remote.payoutNotice,
+                        listingId = remote.listingId.ifBlank { existing.listingId },
+                        amountUsd = remote.amountUsd
+                    )
+                )
+            }
+        }
+    }
 
     suspend fun seedInitialDataIfEmpty() {
         // Sideload ship: do not invent a marketplace. Existing installs keep their Room data.
@@ -494,14 +562,43 @@ class VaultRepository(
         return savedItem
     }
 
-    suspend fun createEscrow(
+    suspend fun listItemForSale(item: CollectibleItem, salePriceUsd: Double): CollectibleItem {
+        val priced = item.copy(
+            isListedForSale = true,
+            salePriceUsd = salePriceUsd,
+            marketplaceListingId = FirestoreSyncManager.listingDocumentId(item)
+        )
+        val listingId = FirestoreSyncManager.publishListing(priced, appContext)
+        val saved = priced.copy(marketplaceListingId = listingId)
+        db.collectibleDao().updateItem(saved)
+        FirestoreSyncManager.syncCollectibleToCloud(saved, appContext)
+        return saved
+    }
+
+    suspend fun unlistItem(item: CollectibleItem): CollectibleItem {
+        // Cloud listings carry the *seller's* Room id; never write them into this user's Room.
+        val local = db.collectibleDao().getItemById(item.id)
+            ?.takeIf { it.vaultHashId == item.vaultHashId }
+            ?: throw IllegalStateException("Only the seller can unlist this item.")
+        FirestoreSyncManager.unpublishListing(local, appContext) // throws if the cloud delete fails
+        val saved = local.copy(isListedForSale = false, salePriceUsd = 0.0)
+        db.collectibleDao().updateItem(saved)
+        FirestoreSyncManager.syncCollectibleToCloud(saved, appContext)
+        return saved
+    }
+
+    /**
+     * Legacy Room insert kept only as an offline placeholder. Real escrow is created by the
+     * Stripe webhook after PaymentIntent success — never invent local release authority.
+     */
+    suspend fun createLocalEscrowPlaceholder(
         item: CollectibleItem,
         buyerName: String,
         currencyCode: String,
-        feePercentage: Double = 3.5
+        paymentIntentId: String,
+        listingId: String
     ): Long {
         val itemPrice = if (item.salePriceUsd > 0) item.salePriceUsd else item.estimatedValueUsd
-        val feeUsd = itemPrice * (feePercentage / 100.0)
         val escrow = EscrowTransaction(
             itemId = item.id,
             itemTitle = item.title,
@@ -509,51 +606,179 @@ class VaultRepository(
             sellerName = item.ownerName,
             amountUsd = itemPrice,
             currencyCode = currencyCode,
-            feeUsd = feeUsd,
-            feePercentage = feePercentage,
-            status = EscrowStatus.FUNDS_HELD.name
+            feeUsd = 0.0,
+            feePercentage = 0.0,
+            status = EscrowStatus.PAID.name,
+            serverEscrowId = "",
+            listingId = listingId,
+            releaseStatus = "held",
+            trackingNumber = "",
+            shippingCarrier = ""
         )
         val escrowId = db.escrowDao().insertEscrow(escrow)
-
         db.tradeAlertDao().insertAlert(
             TradeAlert(
-                title = "New Escrow Trade Created",
-                message = "Escrow #${escrowId} for '${item.title}' active with ${String.format("%.1f", feePercentage)}% platform fee held safely.",
+                title = "Payment Submitted",
+                message = "PaymentIntent $paymentIntentId submitted for '${item.title}'. Escrow appears after webhook confirmation.",
                 alertType = "ESCROW"
             )
         )
         return escrowId
     }
 
-    suspend fun confirmEscrowBuyer(escrowId: Long) {
-        val escrow = db.escrowDao().getEscrowById(escrowId) ?: return
-        val updated = escrow.copy(buyerConfirmed = true)
-        checkAndReleaseEscrow(updated)
+    suspend fun waitForServerEscrow(listingId: String, timeoutMs: Long = 45_000L): EscrowTransaction? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val match = cloudEscrows.value.firstOrNull { it.listingId == listingId && it.serverEscrowId.isNotBlank() }
+                ?: db.escrowDao().getAllEscrows().first().firstOrNull {
+                    it.listingId == listingId && it.serverEscrowId.isNotBlank()
+                }
+            if (match != null) return match
+            delay(1_500)
+        }
+        return null
     }
 
-    suspend fun confirmEscrowSeller(escrowId: Long) {
-        val escrow = db.escrowDao().getEscrowById(escrowId) ?: return
-        val updated = escrow.copy(sellerConfirmed = true)
-        checkAndReleaseEscrow(updated)
-    }
-
-    private suspend fun checkAndReleaseEscrow(escrow: EscrowTransaction) {
-        if (escrow.buyerConfirmed && escrow.sellerConfirmed) {
-            val netSellerPayout = escrow.amountUsd - escrow.feeUsd
-            val completedEscrow = escrow.copy(
-                status = EscrowStatus.RELEASED.name
-            )
-            db.escrowDao().updateEscrow(completedEscrow)
-
+    suspend fun confirmEscrowBuyer(escrow: EscrowTransaction) {
+        val serverId = escrow.serverEscrowId
+        if (serverId.isBlank()) {
+            throw IllegalStateException("Server escrow is not ready yet. Wait for payment webhook confirmation.")
+        }
+        val response = NetworkModule.paymentService.confirmEscrowReceipt(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            escrowId = serverId,
+            body = emptyMap()
+        )
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Confirm receipt failed: HTTP ${response.code()}")
+        }
+        val body = response.body()
+        applyServerEscrowUpdate(escrow, body?.state, body?.releaseStatus, body?.buyerConfirmedReceived, body?.sellerConfirmedShipped, body?.payoutNotice)
+        if (!body?.payoutNotice.isNullOrBlank()) {
             db.tradeAlertDao().insertAlert(
                 TradeAlert(
-                    title = "Escrow Funds Released!",
-                    message = "Both buyer and seller confirmed Escrow #${escrow.id}. Payout of \$${String.format("%.2f", netSellerPayout)} released to seller. Platform fee \$${String.format("%.2f", escrow.feeUsd)} (${escrow.feePercentage}%) credited to platform account.",
+                    title = "Release blocked",
+                    message = body!!.payoutNotice!!,
                     alertType = "ESCROW"
                 )
             )
+        }
+    }
+
+    suspend fun shipEscrowAsSeller(
+        escrow: EscrowTransaction,
+        carrier: String,
+        trackingNumber: String
+    ) {
+        val serverId = escrow.serverEscrowId
+        if (serverId.isBlank()) {
+            throw IllegalStateException("Server escrow is not ready yet.")
+        }
+        val response = NetworkModule.paymentService.shipEscrow(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            escrowId = serverId,
+            request = EscrowShipRequest(carrier = carrier, trackingNumber = trackingNumber)
+        )
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Ship failed: HTTP ${response.code()}")
+        }
+        val body = response.body()
+        applyServerEscrowUpdate(
+            escrow.copy(shippingCarrier = carrier, trackingNumber = trackingNumber),
+            body?.state,
+            body?.releaseStatus,
+            body?.buyerConfirmedReceived,
+            body?.sellerConfirmedShipped,
+            body?.payoutNotice
+        )
+    }
+
+    suspend fun openEscrowDispute(escrow: EscrowTransaction, reason: String, details: String? = null) {
+        val serverId = escrow.serverEscrowId
+        if (serverId.isBlank()) {
+            throw IllegalStateException("Server escrow is not ready yet.")
+        }
+        val response = NetworkModule.paymentService.openEscrowDispute(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            escrowId = serverId,
+            request = EscrowDisputeRequest(reason = reason, details = details)
+        )
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Dispute failed: HTTP ${response.code()}")
+        }
+        val body = response.body()
+        applyServerEscrowUpdate(escrow, body?.state, body?.releaseStatus, body?.buyerConfirmedReceived, body?.sellerConfirmedShipped, body?.payoutNotice)
+    }
+
+    private suspend fun applyServerEscrowUpdate(
+        escrow: EscrowTransaction,
+        state: String?,
+        releaseStatus: String?,
+        buyerConfirmed: Boolean?,
+        sellerConfirmed: Boolean?,
+        payoutNotice: String?
+    ) {
+        if (escrow.id == 0L && escrow.serverEscrowId.isNotBlank()) {
+            // Cloud-only row; listener will refresh.
+            return
+        }
+        val updated = escrow.copy(
+            status = state?.let { EscrowStatus.fromServerState(it).name } ?: escrow.status,
+            releaseStatus = releaseStatus ?: escrow.releaseStatus,
+            buyerConfirmed = buyerConfirmed ?: escrow.buyerConfirmed,
+            sellerConfirmed = sellerConfirmed ?: escrow.sellerConfirmed,
+            payoutNotice = payoutNotice ?: escrow.payoutNotice,
+            trackingNumber = escrow.trackingNumber,
+            shippingCarrier = escrow.shippingCarrier
+        )
+        if (escrow.id > 0L) {
+            db.escrowDao().updateEscrow(updated)
+        }
+    }
+
+    suspend fun getConnectStatus() =
+        NetworkModule.paymentService.getConnectStatus(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            body = emptyMap()
+        ).let { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Connect status failed: HTTP ${response.code()}")
+            }
+            response.body() ?: throw IllegalStateException("Empty Connect status response")
+        }
+
+    suspend fun createConnectOnboardingLink(
+        returnUrl: String = "https://vaultables.com/connect/return",
+        refreshUrl: String = "https://vaultables.com/connect/refresh"
+    ): String {
+        val response = NetworkModule.paymentService.createConnectAccountLink(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            request = ConnectAccountLinkRequest(returnUrl = returnUrl, refreshUrl = refreshUrl)
+        )
+        if (!response.isSuccessful) {
+            throw IllegalStateException("Connect onboarding failed: HTTP ${response.code()}")
+        }
+        return response.body()?.url ?: throw IllegalStateException("Empty Connect onboarding URL")
+    }
+
+    suspend fun createStripePaymentIntent(item: CollectibleItem): Pair<com.example.data.remote.EscrowPaymentResponse, String> {
+        val listingId = item.marketplaceListingId.ifBlank {
+            if (!item.isListedForSale || item.vaultHashId.isBlank()) {
+                throw IllegalArgumentException("Only a published marketplace listing can be purchased.")
+            }
+            FirestoreSyncManager.listingDocumentId(item)
+        }
+        val req = EscrowPaymentRequest(listingId)
+        val response = NetworkModule.paymentService.createEscrowPaymentIntent(
+            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
+            idempotencyKey = UUID.randomUUID().toString().replace("-", ""),
+            request = req
+        )
+        if (response.isSuccessful) {
+            val body = response.body() ?: throw Exception("Empty response from Escrow Server")
+            return body to listingId
         } else {
-            db.escrowDao().updateEscrow(escrow)
+            throw IllegalStateException("Failed to create a secure payment intent: HTTP ${response.code()}.")
         }
     }
 
@@ -582,23 +807,6 @@ class VaultRepository(
             CurrencyCode.EUR -> String.format("€%.2f EUR", converted)
             CurrencyCode.GBP -> String.format("£%.2f GBP", converted)
             CurrencyCode.JPY -> String.format("¥%,.0f JPY", converted)
-        }
-    }
-
-    suspend fun createStripePaymentIntent(item: CollectibleItem): com.example.data.remote.EscrowPaymentResponse {
-        if (!item.isListedForSale || item.vaultHashId.isBlank()) {
-            throw IllegalArgumentException("Only a published marketplace listing can be purchased.")
-        }
-        val req = EscrowPaymentRequest("market_${item.vaultHashId}")
-        val response = NetworkModule.paymentService.createEscrowPaymentIntent(
-            authorization = FirebaseAuthTokenProvider.authorizationHeader(),
-            idempotencyKey = UUID.randomUUID().toString().replace("-", ""),
-            request = req
-        )
-        if (response.isSuccessful) {
-            return response.body() ?: throw Exception("Empty response from Escrow Server")
-        } else {
-            throw IllegalStateException("Failed to create a secure payment intent: HTTP ${response.code()}.")
         }
     }
 

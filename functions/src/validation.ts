@@ -140,10 +140,16 @@ export function validateShipping(body: unknown): { carrier: string; trackingNumb
   if (!isRecord(body) || !hasOnlyKeys(body, ["carrier", "trackingNumber"])) {
     throw new ApiError(400, "invalid-argument", "The shipping request contains unsupported fields.");
   }
-  return {
-    carrier: requiredString(body.carrier, "carrier", 64),
-    trackingNumber: requiredString(body.trackingNumber, "trackingNumber", 128),
-  };
+  const carrier = requiredString(body.carrier, "carrier", 64);
+  const trackingNumber = requiredString(body.trackingNumber, "trackingNumber", 64).trim();
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9 -]{3,63}$/.test(trackingNumber)
+    || /pending|placeholder/i.test(trackingNumber)
+    || /^TRK-VAULT/i.test(trackingNumber)
+  ) {
+    throw new ApiError(400, "invalid-argument", "trackingNumber must be a real carrier tracking number.");
+  }
+  return { carrier, trackingNumber };
 }
 
 export function validateDispute(body: unknown): { reason: string; details?: string } {
@@ -155,4 +161,36 @@ export function validateDispute(body: unknown): { reason: string; details?: stri
     throw new ApiError(400, "invalid-argument", "reason is not supported.");
   }
   return { reason, details: optionalString(body.details, "details", 1_000) };
+}
+
+export function validateConnectUrls(body: unknown): { returnUrl: string; refreshUrl: string } {
+  if (!isRecord(body) || !hasOnlyKeys(body, ["returnUrl", "refreshUrl"])) {
+    throw new ApiError(400, "invalid-argument", "The Connect request contains unsupported fields.");
+  }
+  return {
+    returnUrl: validateAllowedHttpsUrl(body.returnUrl, "returnUrl"),
+    refreshUrl: validateAllowedHttpsUrl(body.refreshUrl, "refreshUrl"),
+  };
+}
+
+function validateAllowedHttpsUrl(value: unknown, field: string): string {
+  const raw = requiredString(value, field, 2_048);
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new ApiError(400, "invalid-argument", `${field} must be a valid HTTPS URL.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new ApiError(400, "invalid-argument", `${field} must use HTTPS.`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const allowed =
+    host === "vaultables.com" ||
+    host.endsWith(".vaultables.com") ||
+    host === "api.vaultables.com";
+  if (!allowed) {
+    throw new ApiError(400, "invalid-argument", `${field} host is not allowlisted.`);
+  }
+  return parsed.toString();
 }

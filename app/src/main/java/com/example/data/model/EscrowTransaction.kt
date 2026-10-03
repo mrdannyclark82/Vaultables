@@ -6,9 +6,25 @@ import androidx.room.PrimaryKey
 enum class EscrowStatus(val label: String, val stepIndex: Int) {
     INITIATED("Escrow Created", 0),
     FUNDS_HELD("Funds Secured in Escrow", 1),
+    PAID("Payment Secured", 1),
     SHIPPED("Item Shipped (Tracking active)", 2),
     VERIFICATION("In Inspection & AI Verification", 3),
-    RELEASED("Funds Released & Trade Complete", 4)
+    INSPECTION("In Inspection", 3),
+    RELEASE_PROCESSING("Release Processing", 3),
+    RELEASED("Funds Released & Trade Complete", 4),
+    DISPUTED("Dispute Open", 2);
+
+    companion object {
+        fun fromServerState(state: String): EscrowStatus = when (state.lowercase()) {
+            "paid" -> PAID
+            "shipped" -> SHIPPED
+            "inspection" -> INSPECTION
+            "release_processing" -> RELEASE_PROCESSING
+            "released" -> RELEASED
+            "disputed" -> DISPUTED
+            else -> FUNDS_HELD
+        }
+    }
 }
 
 enum class CurrencyCode(val symbol: String, val code: String, val rateFromUsd: Double) {
@@ -27,12 +43,17 @@ data class EscrowTransaction(
     val sellerName: String,
     val amountUsd: Double,
     val currencyCode: String = "USD",
-    val feeUsd: Double, // platform fee
-    val feePercentage: Double = 3.5, // configurable fee % (3.0 - 5.0)
+    val feeUsd: Double, // platform fee (display only; server is authoritative for settlement)
+    val feePercentage: Double = 3.5,
     val buyerConfirmed: Boolean = false,
     val sellerConfirmed: Boolean = false,
-    val status: String = EscrowStatus.FUNDS_HELD.name,
-    val trackingNumber: String = "TRK-VAULT-${(10000..99999).random()}",
-    val shippingCarrier: String = "VaultX Secure Logistics",
-    val createdAt: Long = System.currentTimeMillis()
+    val status: String = EscrowStatus.PAID.name,
+    val trackingNumber: String = "",
+    val shippingCarrier: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Server escrow document id (Stripe paymentIntent id). Empty until webhook creates it. */
+    val serverEscrowId: String = "",
+    val listingId: String = "",
+    val releaseStatus: String = "held",
+    val payoutNotice: String = ""
 )

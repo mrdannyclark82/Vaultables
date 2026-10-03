@@ -16,7 +16,7 @@ import com.example.data.model.*
         TradeAlert::class,
         UserReview::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +27,17 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userReviewDao(): UserReviewDao
 
     companion object {
+        
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE collectible_items ADD COLUMN marketplaceListingId TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE escrow_transactions ADD COLUMN serverEscrowId TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE escrow_transactions ADD COLUMN listingId TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE escrow_transactions ADD COLUMN releaseStatus TEXT NOT NULL DEFAULT 'held'")
+                database.execSQL("ALTER TABLE escrow_transactions ADD COLUMN payoutNotice TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         private val MIGRATION_6_8 = object : Migration(6, 8) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE collectible_items ADD COLUMN localBackImagePath TEXT")
@@ -46,7 +57,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "vault_collectibles.db"
                 )
-                .addMigrations(MIGRATION_6_8)
+                .addMigrations(MIGRATION_6_8, MIGRATION_8_9)
                 .build()
                 INSTANCE = instance
                 instance

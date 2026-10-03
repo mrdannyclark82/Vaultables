@@ -96,5 +96,7 @@ data class CollectibleItem(
     val cardNumber: String = "",
     val localImagePath: String? = null, // local URI if a front photo was taken
     val localBackImagePath: String? = null,
-    val verificationSummary: String = ""
+    val verificationSummary: String = "",
+    /** Firestore marketplaceListings document id used by create-intent. */
+    val marketplaceListingId: String = ""
 )
